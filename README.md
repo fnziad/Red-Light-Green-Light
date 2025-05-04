@@ -17,17 +17,14 @@ Use your weapon to shoot down enemy contestants blocking your path, but watch yo
     *   **Green Light:** Move freely! The doll faces away.
     *   **Yellow Light:** Warning! Red light is coming soon. The doll starts turning. Enemies slow down.
     *   **Red Light:** FREEZE! Do not move your character at all. The doll faces you. Movement detected = Game Over.
-    *   *Enemy Behavior:* Enemies also try to follow the rules, but might slip up during Red Light and get eliminated (scoring you points!).
 *   **Shooting:**
     *   Press `Spacebar` to shoot.
-    *   Ammo is limited but can be replenished via power-ups.
 *   **Enemies:**
     *   **Red:** Fast, low health (1 hit). More likely to move on Red Light.
     *   **Blue:** Medium speed, medium health (2 hits).
     *   **Black:** Slow, high health (5 hits), larger size. More cautious on Red Light.
 *   **Power-ups:**
-    *   **Speed Boost (Cyan Ring):** Grants a temporary significant speed increase.
-    *   **Ammo (Red Cube):** Replenishes a portion of your ammo.
+    *   **Speed Boost:** Grants a temporary significant speed increase.
 *   **Difficulty:** The time intervals for Green/Red light phases become shorter as the game progresses (based on survival time).
 *   **Winning:** Reach the finish zone (marked with white flashing ground and a FINISH sign).
 *   **Losing:** Move during Red Light, or get touched by an enemy.
@@ -94,6 +91,4 @@ Use your weapon to shoot down enemy contestants blocking your path, but watch yo
 *   Networked multiplayer mode.
 *   Persistent high scores.
 
-## License
-
-[Specify License Here - e.g., MIT License]
+## still working on this 
