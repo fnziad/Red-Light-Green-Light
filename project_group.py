@@ -2937,6 +2937,13 @@ def display():
     # Swap buffers to display the rendered scene
     glutSwapBuffers()
 
+def reshape(width, height):
+    global WINDOW_WIDTH, WINDOW_HEIGHT
+    WINDOW_WIDTH = width
+    WINDOW_HEIGHT = height
+    glViewport(0, 0, width, height)
+    glutPostRedisplay()
+
 def print_controls():
     """Print game controls to the console."""
     print("\n--- Squid Game: Red Light Green Light Controls ---")
@@ -3036,6 +3043,7 @@ def main():
     glutSpecialFunc(special_key_pressed)
     glutSpecialUpFunc(special_key_released)
     glutIdleFunc(update_state)
+    glutReshapeFunc(reshape)
     
     # Start the game loop
     print("Starting game... Press Space to start, ESC to exit")
