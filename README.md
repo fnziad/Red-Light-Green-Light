@@ -1,94 +1,153 @@
-# Squid Game: Red Light Green Light (Python/OpenGL)
+# Squid Game: Red Light, Green Light
 
-![Gameplay Screenshot Placeholder](screenshot.png) <!-- It's highly recommended to add a screenshot or GIF here -->
+A 3D game built from scratch in **Python** using **PyOpenGL** and **GLUT**, inspired by the iconic "Red Light, Green Light" challenge from *Squid Game* — with added combat, power-ups, enemy AI, level progression, and more.
 
-A 3D game implemented in Python using PyOpenGL, inspired by the "Red Light, Green Light" challenge from *Squid Game*, with added shooting mechanics and power-ups.
+> **Version 4.0** — Solo project by **Ziad**
 
-## Overview
-
-Race against the clock and other contestants (enemies) to reach the finish line. Follow the commands of the giant doll: move during "Green Light", anticipate the stop during "Yellow Light", and freeze *completely* during "Red Light". Any movement during Red Light means elimination!
-
-Use your weapon to shoot down enemy contestants blocking your path, but watch your ammo count. Collect power-ups to gain an edge. Can you survive and reach the finish line?
+---
 
 ## Gameplay
 
-*   **Objective:** Cross the playing field from the start to the finish zone before time runs out or you get caught.
-*   **Red Light, Green Light:**
-    *   **Green Light:** Move freely! The doll faces away.
-    *   **Yellow Light:** Warning! Red light is coming soon. The doll starts turning. Enemies slow down.
-    *   **Red Light:** FREEZE! Do not move your character at all. The doll faces you. Movement detected = Game Over.
-*   **Shooting:**
-    *   Press `Spacebar` to shoot.
-*   **Enemies:**
-    *   **Red:** Fast, low health (1 hit). More likely to move on Red Light.
-    *   **Blue:** Medium speed, medium health (2 hits).
-    *   **Black:** Slow, high health (5 hits), larger size. More cautious on Red Light.
-*   **Power-ups:**
-    *   **Speed Boost:** Grants a temporary significant speed increase.
-*   **Difficulty:** The time intervals for Green/Red light phases become shorter as the game progresses (based on survival time).
-*   **Winning:** Reach the finish zone (marked with white flashing ground and a FINISH sign).
-*   **Losing:** Move during Red Light, or get touched by an enemy.
+Race across a dangerous arena to reach the finish line while obeying the doll's commands:
+
+| Light State | What Happens |
+|-------------|-------------|
+| **Green** | Move freely — the doll faces away |
+| **Yellow** | Warning — red light is imminent, the doll starts turning |
+| **Red** | **FREEZE!** Any movement = instant elimination |
+
+### Core Mechanics
+
+- **Shooting** — Fire bullets to eliminate enemies blocking your path (Space)
+- **Sprint** — Hold Shift for a speed burst; overuse triggers a 4-second exhaustion cooldown with 55% speed penalty
+- **Jump** — Press J to leap over enemies and dodge bullets (with full gravity physics)
+- **Shield Power-up** — Absorbs one enemy collision or bullet hit, destroying the enemy on contact
+- **Speed Power-up** — Temporary +70% movement speed boost
+- **Enemy Bullets** — Enemies fire slow, dodgeable projectiles; jump or strafe to avoid them
+- **Level Progression** — After winning, press N to advance to harder levels with more enemies, faster AI, and shorter light intervals
+
+### Enemies
+
+| Type | Speed | Health | Behavior |
+|------|-------|--------|----------|
+| **Red** | Fast | 1 HP | Aggressive, shoots from Level 2+ |
+| **Blue** | Medium | 2 HP | Balanced, shoots bullets |
+| **Black** | Slow | 5+ HP | Tanky, large hitbox, always shoots |
+
+### Win / Lose Conditions
+
+- **Win**: Reach the finish line (progress >= 95%)
+- **Lose**: Move during red light, get touched by an enemy, or get hit by an enemy bullet
+
+---
 
 ## Controls
 
-*   **Movement:** `W` `A` `S` `D` (Relative to camera direction)
-*   **Camera Tilt:** `Arrow Up` / `Arrow Down`
-*   **Camera Rotate:** `Arrow Left` / `Arrow Right`
-*   **Camera Zoom:** `Z` (Zoom In) / `X` (Zoom Out)
-*   **Shoot:** `Spacebar`
-*   **Restart Game:** `R`
-*   **Toggle Debug Info:** `P`
-*   **Exit Game:** `ESC`
+| Key | Action |
+|-----|--------|
+| `W` `A` `S` `D` | Move (relative to camera) |
+| `Arrow Keys` | Rotate / tilt camera |
+| `Z` / `X` | Zoom in / out |
+| `Space` | Shoot |
+| `Shift` (hold) | Sprint |
+| `J` | Jump |
+| `R` | Restart game (Level 1) |
+| `N` | Next level (after winning) |
+| `P` | Toggle debug info |
+| `ESC` | Exit |
+
+---
 
 ## Features
 
-*   Classic "Red Light, Green Light" mechanic with timed states (Green, Yellow, Red).
-*   Third-person camera system with player-relative movement.
-*   Shooting mechanic with ammo management.
-*   Multiple enemy types with distinct AI behaviors (movement, health, red light risk).
-*   Power-up system (Speed Boost, Ammo).
-*   Dynamic difficulty scaling based on survival time.
-*   Procedurally generated forest environment surrounding the playfield.
-*   Basic physics for player movement (velocity/friction).
-*   Smooth camera and player movement using interpolation.
-*   Clear UI/HUD displaying game state, timers, score, ammo, progress, etc.
-*   Segmented character models for player, doll, and enemies.
-*   Visual effects for speed boost, bullet trails, hit indicators, etc.
+- Classic Red Light / Green Light state machine with Green, Yellow, Red cycling
+- Third-person camera with smooth interpolation and player-relative movement
+- Shooting system with ammo management and bullet trails
+- Three enemy types with distinct AI (movement speed, health, red-light risk behavior)
+- Sprint with stamina bar, exhaustion state, and cooldown system
+- Jump mechanic with gravity physics — dodge enemies and bullets mid-air
+- Shield and Speed power-ups with visual effects (glowing orbs, bobbing animation)
+- Enemy bullet system — enemies shoot slow projectiles you can dodge
+- Level progression with scaling difficulty (enemy count, speed, health, shoot frequency)
+- High score system with name entry on win
+- Dynamic difficulty that increases over time (shorter light intervals per phase)
+- Procedurally generated forest environment surrounding the playfield
+- Full HUD: score, time, kills, phase, level, stamina bar, shield timer, FPS, ammo
+- Game over and win overlays with stats, leaderboard, and next-level prompt
+- Screen shake on hits
+- Segmented 3D character models for player, doll, and enemies (no external assets)
+
+---
 
 ## How to Run
 
-1.  **Dependencies:**
-    *   Python 3.x
-    *   PyOpenGL (`pip install PyOpenGL PyOpenGL_accelerate`)
-    *   GLUT (Usually included with PyOpenGL or needs to be installed separately depending on your OS - e.g., `sudo apt-get install freeglut3-dev` on Debian/Ubuntu, or download pre-compiled libraries for Windows).
-2.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd <repository-directory>
-    ```
-3.  **Run the script:**
-    ```bash
-    python project_group.py
-    ```
-4.  Press `Spacebar` on the start screen to begin the game.
+### Prerequisites
 
-## Code Structure Overview
+- **Python 3.8+**
+- **PyOpenGL** with GLUT support
 
-*   **Global Constants:** (Top of the file) Configuration for window, game rules, timings, physics, visuals, entities.
-*   **Utility & Setup Functions:** `draw_text`, `setup_fixed_environment`, `setup_enemies`, `setup_powerups`.
-*   **Drawing Functions:** `draw_*` functions responsible for rendering specific game elements (sky, field, doll, player, enemies, bullets, UI).
-*   **Game Logic Functions:** `update_state` (main game loop logic), `start_game`, `fire_weapon`, `update_bullets`, `update_enemies`, `update_powerups`, `check_collisions`, `spawn_powerup`.
-*   **Camera Setup:** `setup_camera` configures the `gluPerspective` and `gluLookAt` matrices.
-*   **Event Handlers:** `key_*`, `special_key_*` functions manage user input. `restart_game` handles game reset.
-*   **Main Function (`main`):** Initializes GLUT and OpenGL, sets up the initial game state, registers callbacks, and starts the main game loop (`glutMainLoop`).
+### Install Dependencies
 
-## Potential Improvements
+```bash
+pip install PyOpenGL PyOpenGL_accelerate
+```
 
-*   More sophisticated enemy AI (pathfinding, evasion).
-*   More power-up types.
-*   Sound effects and background music.
-*   More detailed 3D models / animations.
-*   Networked multiplayer mode.
-*   Persistent high scores.
+On **macOS**, GLUT is included with the system. On **Linux**, you may need:
 
-## still working on this 
+```bash
+sudo apt-get install freeglut3-dev
+```
+
+### Run the Game
+
+```bash
+git clone https://github.com/fnziad/Red-Light-Green-Light.git
+cd Red-Light-Green-Light
+python3 project_group.py
+```
+
+Press **Enter** on the start screen to begin.
+
+---
+
+## Project Structure
+
+```
+Red-Light-Green-Light/
+├── project_group.py      # Main game — all logic, rendering, and UI
+├── LICENSE               # MIT License
+├── README.md             # This file
+└── STABLE_NOTES.md       # Development / stability notes
+```
+
+> The `OpenGL/` directory is the bundled PyOpenGL library for portability.
+> `project_group_backup.py` and `pygame_version/` are legacy files not required to run the game.
+
+---
+
+## Code Architecture
+
+The entire game is contained in a single file (`project_group.py`) organized into these sections:
+
+| Section | Description |
+|---------|-------------|
+| **Global Constants** | Window config, arena dimensions, physics, timing, entity settings |
+| **Setup Functions** | `setup_enemies()`, `setup_powerups()`, `setup_fixed_environment()` |
+| **Drawing Functions** | `draw_player()`, `draw_enemy()`, `draw_doll()`, `draw_bullet()`, `draw_powerup()`, `draw_shield_effect()`, HUD rendering |
+| **Game Logic** | `update_state()` (main loop), `update_enemies()`, `update_bullets()`, `update_enemy_bullets()`, `check_collisions()` |
+| **Camera** | `setup_camera()` with third-person orbit, zoom, and screen shake |
+| **Input Handlers** | `key_pressed()`, `key_released()`, `special_key_*()` — WASD, sprint, jump, shoot, name entry |
+| **Game Flow** | `start_game()`, `restart_game()`, `next_level()` |
+| **Main** | GLUT initialization, callback registration, `glutMainLoop()` |
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## Author
+
+**Ziad** — Design, programming, and everything else.

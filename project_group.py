@@ -13,7 +13,7 @@ NEAR_CLIP = 1.0
 FAR_CLIP = 150000
 
 # Game settings
-GAME_VERSION = "2.0"
+GAME_VERSION = "4.0"
 GAME_TITLE = "Squid Game: Red Light Green Light"
 GAME_STATE = "start"  # Start with start screen
 STATE_TIMER = 0
@@ -64,11 +64,11 @@ player_start_pos = [0, -PLAY_AREA_LENGTH/2 + 50, 15]  # Start slightly inside ar
 player_position = list(player_start_pos)
 target_player_position = list(player_start_pos)
 player_velocity = [0.0, 0.0, 0.0]  # Added for friction movement
-player_friction = 0.88  # Movement friction factor (was 0.85 - slightly increased)
+player_friction = 0.92  # Reduced friction for snappier movement
 player_direction = 90.0
 target_player_direction = 90.0
-player_move_speed = 900.0
-player_base_speed = 900.0  # Base speed for reference
+player_move_speed = 1800.0 # Faster for better gameplay
+player_base_speed = 1800.0  # Base speed for reference
 player_height = 30
 player_width = 15
 player_is_moving = False
@@ -78,14 +78,61 @@ player_speed_boost_active = False
 player_speed_boost_timer = 0.0
 player_speed_boost_duration = 5.0  # 5 seconds of speed boost
 
+# Stamina System
+player_stamina = 100.0
+player_max_stamina = 100.0
+player_stamina_regen = 30.0  # Per second (fast regen)
+player_stamina_drain = 15.0  # Per second (slow drain for longer sprints)
+player_is_sprinting = False
+sprint_key_held = False  # Track Shift key state
+sprint_multiplier = 2.2  # Good sprint boost
+
+# Sprint Exhaustion & Cooldown
+sprint_exhausted = False        # True when stamina fully drained
+sprint_cooldown_timer = 0.0     # Counts down during exhaustion
+SPRINT_COOLDOWN_DURATION = 4.0  # 4 seconds before sprint available again
+SPRINT_EXHAUSTED_SPEED_MULT = 0.55  # 55% of normal speed when exhausted (big penalty)
+
+# Jump System
+player_z_velocity = 0.0
+player_is_jumping = False
+player_on_ground = True
+JUMP_FORCE = 450.0
+GRAVITY = 900.0
+player_ground_z = 15.0  # Normal ground level
+
+# Shield System
+player_shield_active = False
+player_shield_timer = 0.0
+SHIELD_DURATION = 6.0  # 6 seconds of shield
+
+# Enemy Bullets
+enemy_bullets = []
+ENEMY_BULLET_SPEED = 350.0  # Slow bullets player must dodge
+ENEMY_BULLET_SIZE = 10.0
+ENEMY_SHOOT_INTERVAL_MIN = 3.0
+ENEMY_SHOOT_INTERVAL_MAX = 8.0
+
+# Level / Arena Scaling
+CURRENT_LEVEL = 1
+LEVEL_ARENA_WIDTH_MULT = 1.0   # Scales arena width per level
+LEVEL_ARENA_LENGTH_MULT = 1.0  # Scales arena length per level
+
+# High Score System
+high_scores = []  # List of (name, score) tuples
+player_name_input = ""  # For name entry
+name_entry_active = False  # True when entering name after win
+MAX_HIGH_SCORES = 10
+
+
 # Enemy attributes
 enemies = []
 NUM_RED_ENEMIES = 6  # Reduced from 8
 NUM_BLUE_ENEMIES = 4  # Reduced from 5
 NUM_BLACK_ENEMIES = 2  # Unchanged
-ENEMY_MOVE_SPEED_RED = 350.0       # Drastically reduced from 600.0
-ENEMY_MOVE_SPEED_BLUE = 250.0      # Drastically reduced from 450.0 
-ENEMY_MOVE_SPEED_BLACK = 150.0     # Drastically reduced from 250.0
+ENEMY_MOVE_SPEED_RED = 500.0       # Increased from 350.0
+ENEMY_MOVE_SPEED_BLUE = 350.0      # Increased from 250.0 
+ENEMY_MOVE_SPEED_BLACK = 200.0     # Increased from 150.0
 ENEMY_HEIGHT = 60                  # Increased from 45
 ENEMY_WIDTH = 40                   # Increased from 28
 ENEMY_DETECTION_RADIUS = 30.0  # For movement detection during red light
@@ -99,9 +146,10 @@ BULLET_SIZE = 8.0  # Added defined bullet size for clarity
 
 # Power-ups
 powerups = []
-NUM_POWERUPS = 3
-POWERUP_SPAWN_INTERVAL = 20.0  # Time in seconds between powerup spawns
+NUM_POWERUPS = 5  # More powerups for variety
+POWERUP_SPAWN_INTERVAL = 15.0  # Faster spawning
 powerup_spawn_timer = 0.0
+POWERUP_TYPES = ['speed', 'shield']  # Available powerup types
 
 # --- Camera Attributes ---
 camera_height = 45
@@ -115,6 +163,18 @@ target_camera_pitch = camera_pitch
 camera_yaw = 0.0
 target_camera_yaw = camera_yaw
 camera_rotation_speed = 120.0
+
+# Screen Shake
+camera_shake_x = 0.0
+camera_shake_y = 0.0
+shake_intensity = 0.0
+shake_timer = 0.0
+
+# Particle System - DISABLED FOR STABILITY
+particles = []  # Not used
+particle_system_enabled = False
+
+
 
 # Sun attributes
 sun_size = 450
@@ -131,6 +191,8 @@ DOLL_POSITION = [0, PLAY_AREA_LENGTH / 2, 0]  # Base exactly at finish line star
 # Static environment elements
 fixed_plants = []
 plant_positions = set()
+environment_display_list = None
+
 
 # Input state tracking
 keys_pressed = set()
@@ -303,6 +365,21 @@ def setup_fixed_environment():
     # Reset random seed
     random.seed()
 
+def create_environment_display_list():
+    """Compiles the static environment into a display list for performance."""
+    global environment_display_list
+    
+    print("Compiling environment display list...")
+    environment_display_list = glGenLists(1)
+    glNewList(environment_display_list, GL_COMPILE)
+    
+    draw_field()
+    draw_fixed_plants()
+    
+    glEndList()
+    print("Environment display list compiled.")
+
+
 def setup_enemies():
     """Create enemy characters at positions ahead of the player."""
     global enemies
@@ -310,27 +387,33 @@ def setup_enemies():
     
     half_play_w = PLAY_AREA_WIDTH / 2 - 50
     
+    # Scale enemy count with level
+    num_red = NUM_RED_ENEMIES + (CURRENT_LEVEL - 1) * 2
+    num_blue = NUM_BLUE_ENEMIES + (CURRENT_LEVEL - 1)
+    num_black = NUM_BLACK_ENEMIES + max(0, (CURRENT_LEVEL - 2))
+    
     # Red enemies - fastest, 1 hit
-    for _ in range(NUM_RED_ENEMIES):
+    for _ in range(num_red):
         x = random.uniform(-half_play_w, half_play_w)
-        # Place enemies ahead of player, toward the finish line
         y = random.uniform(0, PLAY_AREA_LENGTH / 2 - 500)
         direction = random.uniform(0, 360)
         
         enemy = {
             'position': [x, y, 0],
             'direction': direction,
-            'speed': ENEMY_MOVE_SPEED_RED * random.uniform(0.9, 1.1),
-            'color': (0.95, 0.2, 0.2),  # Red
+            'speed': ENEMY_MOVE_SPEED_RED * random.uniform(0.9, 1.1) * (1.0 + CURRENT_LEVEL * 0.1),
+            'color': (0.95, 0.2, 0.2),
             'type': 'red',
             'health': 1,
             'alive': True,
-            'last_position': [x, y, 0]
+            'last_position': [x, y, 0],
+            'shoot_timer': random.uniform(ENEMY_SHOOT_INTERVAL_MIN, ENEMY_SHOOT_INTERVAL_MAX),
+            'can_shoot': CURRENT_LEVEL >= 2  # Red enemies shoot from level 2
         }
         enemies.append(enemy)
     
     # Blue enemies - medium speed, 2 hits
-    for _ in range(NUM_BLUE_ENEMIES):
+    for _ in range(num_blue):
         x = random.uniform(-half_play_w, half_play_w)
         y = random.uniform(0, PLAY_AREA_LENGTH / 2 - 500)
         direction = random.uniform(0, 360)
@@ -338,17 +421,19 @@ def setup_enemies():
         enemy = {
             'position': [x, y, 0],
             'direction': direction,
-            'speed': ENEMY_MOVE_SPEED_BLUE * random.uniform(0.9, 1.1),
-            'color': (0.2, 0.3, 0.9),  # Blue
+            'speed': ENEMY_MOVE_SPEED_BLUE * random.uniform(0.9, 1.1) * (1.0 + CURRENT_LEVEL * 0.1),
+            'color': (0.2, 0.3, 0.9),
             'type': 'blue',
             'health': 2,
             'alive': True,
-            'last_position': [x, y, 0]
+            'last_position': [x, y, 0],
+            'shoot_timer': random.uniform(ENEMY_SHOOT_INTERVAL_MIN, ENEMY_SHOOT_INTERVAL_MAX),
+            'can_shoot': True  # Blue enemies always shoot
         }
         enemies.append(enemy)
     
     # Black enemies - slow but tough, 5 hits
-    for _ in range(NUM_BLACK_ENEMIES):
+    for _ in range(num_black):
         x = random.uniform(-half_play_w, half_play_w)
         y = random.uniform(0, PLAY_AREA_LENGTH / 2 - 500)
         direction = random.uniform(0, 360)
@@ -356,13 +441,15 @@ def setup_enemies():
         enemy = {
             'position': [x, y, 0],
             'direction': direction,
-            'speed': ENEMY_MOVE_SPEED_BLACK * random.uniform(0.9, 1.1),
-            'color': (0.1, 0.1, 0.1),  # Black
+            'speed': ENEMY_MOVE_SPEED_BLACK * random.uniform(0.9, 1.1) * (1.0 + CURRENT_LEVEL * 0.1),
+            'color': (0.1, 0.1, 0.1),
             'type': 'black',
-            'health': 5,
-            'scale': 2.0,  # Bigger enemy (increased from 1.5)
+            'health': 5 + CURRENT_LEVEL,
+            'scale': 2.0,
             'alive': True,
-            'last_position': [x, y, 0]
+            'last_position': [x, y, 0],
+            'shoot_timer': random.uniform(ENEMY_SHOOT_INTERVAL_MIN / 2, ENEMY_SHOOT_INTERVAL_MAX / 2),
+            'can_shoot': True  # Black enemies always shoot
         }
         enemies.append(enemy)
 
@@ -380,7 +467,7 @@ def setup_powerups():
         
         powerup = {
             'position': [x, y, 15],
-            'type': 'speed',  # Currently only speed boost
+            'type': random.choice(POWERUP_TYPES),
             'active': True,
             'rotation': 0.0  # For spinning effect
         }
@@ -1010,26 +1097,21 @@ def draw_player_caught():
     glutSolidCube(1.0)
     glPopMatrix()
     
-    # Draw blood effect
+    # Draw blood effect (use deterministic shape to avoid flickering)
     glDisable(GL_LIGHTING)
     glColor4f(0.9, 0.0, 0.0, 0.7)  # Red with alpha
     glBegin(GL_TRIANGLE_FAN)
     glVertex3f(0, 0, -2.0)  # Center slightly below player
     
-    # Create blood splatter shape
+    # Create blood splatter shape with fixed variations
     radius = 30.0
+    blood_variations = [1.0, 0.8, 1.2, 0.9, 1.1, 0.7, 1.3, 0.85, 1.15, 0.95, 1.05, 0.75, 1.0]
     for i in range(13):
         angle = i * (2.0 * math.pi / 12)
-        variation = random.uniform(0.7, 1.3)
+        variation = blood_variations[i]
         x = math.cos(angle) * radius * variation
         y = math.sin(angle) * radius * variation
         glVertex3f(x, y, -2.0)
-    
-    # Close the fan
-    angle = 0.0
-    x = math.cos(angle) * radius
-    y = math.sin(angle) * radius
-    glVertex3f(x, y, -2.0)
     
     glEnd()
     glEnable(GL_LIGHTING)
@@ -1170,19 +1252,26 @@ def draw_enemy(enemy):
     leg_h = ENEMY_HEIGHT * 0.4
     arm_l = ENEMY_HEIGHT * 0.35
     
-    # Draw a glowing outline around enemy to make it stand out against checkered background
+    # Draw a subtle colored marker on the ground under the enemy for visibility
     glDisable(GL_LIGHTING)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     if enemy['type'] == 'red':
-        glColor4f(1.0, 0.3, 0.3, 0.7)  # Red glow
+        glColor4f(1.0, 0.2, 0.2, 0.4)
     elif enemy['type'] == 'blue':
-        glColor4f(0.3, 0.3, 1.0, 0.7)  # Blue glow
+        glColor4f(0.2, 0.2, 1.0, 0.4)
     else:  # black
-        glColor4f(0.5, 0.5, 0.5, 0.7)  # Gray glow
-        
-    glPushMatrix()
-    glScalef(1.15, 1.15, 1.15)  # Slightly larger than the enemy
-    glutSolidSphere(body_h * 1.5, 16, 12)
-    glPopMatrix()
+        glColor4f(0.4, 0.4, 0.4, 0.4)
+    
+    # Flat circle on ground beneath enemy
+    marker_radius = body_w * 1.2
+    glBegin(GL_TRIANGLE_FAN)
+    glVertex3f(0, 0, 0.5)  # Center slightly above ground
+    for i in range(17):
+        angle = i * (2.0 * math.pi / 16)
+        glVertex3f(math.cos(angle) * marker_radius, math.sin(angle) * marker_radius, 0.5)
+    glEnd()
+    glDisable(GL_BLEND)
     glEnable(GL_LIGHTING)
     
     # Draw legs
@@ -1434,6 +1523,80 @@ def draw_bullet(bullet):
     
     glPopMatrix()
 
+def draw_enemy_bullet(eb):
+    """Draw an enemy bullet - larger, slower, more visible for dodging."""
+    glPushMatrix()
+    glTranslatef(eb['position'][0], eb['position'][1], eb['position'][2])
+    
+    glDisable(GL_LIGHTING)
+    
+    # Pulsing red/orange enemy bullet
+    pulse = 0.7 + 0.3 * math.sin(time.time() * 8.0)
+    color = eb.get('color', (1.0, 0.2, 0.2))
+    glColor3f(color[0] * pulse, color[1] * pulse + 0.1, color[2] * pulse)
+    glutSolidSphere(eb['size'], 12, 10)
+    
+    # Glowing halo for visibility
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+    glColor4f(1.0, 0.3, 0.1, 0.35 * pulse)
+    glutSolidSphere(eb['size'] * 2.0, 10, 8)
+    glDisable(GL_BLEND)
+    
+    # Trail
+    angle_rad = math.radians(eb['direction'])
+    dx = -math.cos(angle_rad)
+    dy = -math.sin(angle_rad)
+    trail_len = 35.0
+    trail_w = 4.0
+    nx = -dy * trail_w
+    ny = dx * trail_w
+    
+    x1 = eb['size'] * dx
+    y1 = eb['size'] * dy
+    x2 = x1 + dx * trail_len
+    y2 = y1 + dy * trail_len
+    
+    glBegin(GL_TRIANGLE_STRIP)
+    glColor4f(1.0, 0.2, 0.0, 0.7)
+    glVertex3f(x1 + nx, y1 + ny, 0)
+    glVertex3f(x1 - nx, y1 - ny, 0)
+    glColor4f(1.0, 0.1, 0.0, 0.0)
+    glVertex3f(x2 + nx, y2 + ny, 0)
+    glVertex3f(x2 - nx, y2 - ny, 0)
+    glEnd()
+    
+    glEnable(GL_LIGHTING)
+    glPopMatrix()
+
+def draw_shield_effect():
+    """Draw shield bubble around the player."""
+    if not player_shield_active:
+        return
+    
+    glPushMatrix()
+    glTranslatef(player_position[0], player_position[1], player_position[2] + player_height * 0.5)
+    
+    glDisable(GL_LIGHTING)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    
+    # Pulsing shield bubble
+    pulse = 0.4 + 0.2 * math.sin(time.time() * 4.0)
+    shield_radius = player_width * 2.5
+    
+    # Outer shell
+    glColor4f(0.2, 0.6, 1.0, pulse * 0.4)
+    glutSolidSphere(shield_radius, 20, 16)
+    
+    # Inner bright ring
+    glColor4f(0.4, 0.8, 1.0, pulse * 0.6)
+    glutWireSphere(shield_radius * 0.95, 12, 8)
+    
+    glDisable(GL_BLEND)
+    glEnable(GL_LIGHTING)
+    glPopMatrix()
+
 def draw_powerup(powerup):
     """Draw a power-up."""
     if not powerup['active']:
@@ -1442,49 +1605,68 @@ def draw_powerup(powerup):
     glPushMatrix()
     glTranslatef(powerup['position'][0], powerup['position'][1], powerup['position'][2])
     
-    # Rotate powerup for spinning effect
-    powerup['rotation'] += 1.0
+    # Use current rotation (updated in update_powerups)
     glRotatef(powerup['rotation'], 0, 0, 1)
     
-    # Draw power-up based on type
+    # Hover/bob effect
+    bob = math.sin(time.time() * 3.0 + powerup['position'][0]) * 8.0
+    glTranslatef(0, 0, bob)
+    
+    glDisable(GL_LIGHTING)
+    
+    scale_factor = 2.0
+    
     if powerup['type'] == 'speed':
-        glColor3f(0.0, 0.0, 0.0)  # Black color for visibility
-        
-        # Draw larger lightning bolt shape for speed power-up
-        glDisable(GL_LIGHTING)
-        
-        # Scale up the size by 1.8x for better visibility
-        scale_factor = 1.8
+        # Lightning bolt - yellow/gold
+        glColor3f(1.0, 0.85, 0.0)
         
         glBegin(GL_TRIANGLES)
-        # Lightning bolt shape
         glVertex3f(0, 18 * scale_factor, 0)
         glVertex3f(-9 * scale_factor, 0, 0)
         glVertex3f(0, 0, 0)
-        
         glVertex3f(0, 0, 0)
         glVertex3f(9 * scale_factor, -18 * scale_factor, 0)
         glVertex3f(0, -18 * scale_factor, 0)
-        
         glVertex3f(0, 0, 0)
         glVertex3f(-9 * scale_factor, 0, 0)
         glVertex3f(0, -18 * scale_factor, 0)
-        
         glVertex3f(0, 18 * scale_factor, 0)
         glVertex3f(0, 0, 0)
         glVertex3f(9 * scale_factor, 0, 0)
         glEnd()
         
-        # Draw glowing effect
+        # Yellow glow
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE)
-        
-        glColor4f(0.4, 0.4, 0.4, 0.6)  # Gray glow
-        glutSolidSphere(25, 16, 12)  # Larger sphere
-        
+        glColor4f(1.0, 0.8, 0.0, 0.5)
+        glutSolidSphere(28, 16, 12)
         glDisable(GL_BLEND)
-        glEnable(GL_LIGHTING)
     
+    elif powerup['type'] == 'shield':
+        # Shield icon - blue diamond with sphere
+        glColor3f(0.2, 0.5, 1.0)
+        
+        # Diamond shape
+        s = 16 * scale_factor
+        glBegin(GL_TRIANGLES)
+        # Top
+        glVertex3f(0, s, 0)
+        glVertex3f(-s * 0.6, 0, 0)
+        glVertex3f(s * 0.6, 0, 0)
+        # Bottom
+        glVertex3f(0, -s * 0.8, 0)
+        glVertex3f(-s * 0.6, 0, 0)
+        glVertex3f(s * 0.6, 0, 0)
+        glEnd()
+        
+        # Blue glow
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+        glColor4f(0.2, 0.5, 1.0, 0.5)
+        glutSolidSphere(30, 16, 12)
+        glDisable(GL_BLEND)
+    
+    glEnable(GL_LIGHTING)
     glPopMatrix()
 
 def draw_progress_bar():
@@ -1628,7 +1810,7 @@ def draw_score():
     glMatrixMode(GL_MODELVIEW)
 
 def draw_start_screen():
-    """Draw game start screen."""
+    """Draw game start screen with improved visuals."""
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
@@ -1641,8 +1823,10 @@ def draw_start_screen():
     glDisable(GL_DEPTH_TEST)
     glDisable(GL_LIGHTING)
     
-    # Draw semi-transparent background
-    glColor4f(0.0, 0.0, 0.0, 0.7)
+    # Draw dark background with subtle gradient feel
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glColor4f(0.0, 0.0, 0.0, 0.85)
     glBegin(GL_QUADS)
     glVertex2f(0, 0)
     glVertex2f(WINDOW_WIDTH, 0)
@@ -1650,17 +1834,52 @@ def draw_start_screen():
     glVertex2f(0, WINDOW_HEIGHT)
     glEnd()
     
-    # Draw title
-    title_color = (0.9, 0.1, 0.2)  # Red like in Squid Game
-    draw_centered_text(GAME_TITLE, WINDOW_HEIGHT - 200, GLUT_BITMAP_HELVETICA_18, title_color)
+    # Decorative top/bottom bars 
+    pulse = 0.5 + 0.5 * math.sin(time.time() * 1.5)
+    glColor4f(0.9 * pulse, 0.1, 0.2 * pulse, 0.4)
+    glBegin(GL_QUADS)
+    glVertex2f(0, WINDOW_HEIGHT - 6)
+    glVertex2f(WINDOW_WIDTH, WINDOW_HEIGHT - 6)
+    glVertex2f(WINDOW_WIDTH, WINDOW_HEIGHT)
+    glVertex2f(0, WINDOW_HEIGHT)
+    glEnd()
+    glBegin(GL_QUADS)
+    glVertex2f(0, 0)
+    glVertex2f(WINDOW_WIDTH, 0)
+    glVertex2f(WINDOW_WIDTH, 6)
+    glVertex2f(0, 6)
+    glEnd()
+    glDisable(GL_BLEND)
     
-    # Draw start button
-    button_width = 200
-    button_height = 50
+    # Draw title with Squid Game red
+    title_color = (0.95, 0.1, 0.2)
+    draw_centered_text("SQUID GAME", WINDOW_HEIGHT - 180, GLUT_BITMAP_TIMES_ROMAN_24, title_color)
+    draw_centered_text("Red Light, Green Light", WINDOW_HEIGHT - 215, GLUT_BITMAP_HELVETICA_18, (0.8, 0.8, 0.8))
+    
+    # Version
+    draw_centered_text(f"v{GAME_VERSION}", WINDOW_HEIGHT - 240, GLUT_BITMAP_HELVETICA_12, (0.5, 0.5, 0.5))
+    
+    # Pulsing start button
+    button_width = 280
+    button_height = 46
     button_x = (WINDOW_WIDTH - button_width) / 2
-    button_y = (WINDOW_HEIGHT - button_height) / 2
+    button_y = WINDOW_HEIGHT / 2 + 10
     
-    glColor3f(0.9, 0.1, 0.2)  # Red for button
+    btn_pulse = 0.6 + 0.4 * math.sin(time.time() * 3.0)
+    
+    # Button border glow
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glColor4f(0.9, 0.15, 0.2, 0.3 * btn_pulse)
+    glBegin(GL_QUADS)
+    glVertex2f(button_x - 4, button_y - 4)
+    glVertex2f(button_x + button_width + 4, button_y - 4)
+    glVertex2f(button_x + button_width + 4, button_y + button_height + 4)
+    glVertex2f(button_x, button_y + button_height + 4)
+    glEnd()
+    
+    # Button fill
+    glColor4f(0.85 * btn_pulse, 0.08 * btn_pulse, 0.15 * btn_pulse, 0.9)
     glBegin(GL_QUADS)
     glVertex2f(button_x, button_y)
     glVertex2f(button_x + button_width, button_y)
@@ -1668,27 +1887,45 @@ def draw_start_screen():
     glVertex2f(button_x, button_y + button_height)
     glEnd()
     
-    # Draw button text
-    glColor3f(1.0, 1.0, 1.0)
-    draw_centered_text("START GAME", button_y + 15, GLUT_BITMAP_HELVETICA_18)
+    # Button border
+    glColor3f(0.7, 0.1, 0.15)
+    glLineWidth(2.0)
+    glBegin(GL_LINE_LOOP)
+    glVertex2f(button_x, button_y)
+    glVertex2f(button_x + button_width, button_y)
+    glVertex2f(button_x + button_width, button_y + button_height)
+    glVertex2f(button_x, button_y + button_height)
+    glEnd()
+    glDisable(GL_BLEND)
     
-    # Draw instructions
+    # Button text
     glColor3f(1.0, 1.0, 1.0)
+    draw_centered_text("PRESS ENTER TO START", button_y + 15, GLUT_BITMAP_HELVETICA_18)
     
+    # Instructions in a clean column
     instructions = [
-        "Controls:",
-        "WASD - Movement",
-        "Arrow Keys - Camera",
-        "Z/X - Zoom",
-        "Space - Shoot",
-        "R - Restart",
-        "ESC - Exit"
+        ("WASD", "Move"),
+        ("Arrows", "Camera"),
+        ("Z / X", "Zoom"),
+        ("Space", "Shoot"),
+        ("Shift", "Sprint"),
+        ("J", "Jump"),
+        ("R", "Restart"),
+        ("ESC", "Exit"),
     ]
     
-    y_pos = button_y - 100
-    for instruction in instructions:
-        draw_centered_text(instruction, y_pos, GLUT_BITMAP_9_BY_15)
-        y_pos -= 25
+    y_pos = button_y - 60
+    # Column header
+    draw_centered_text("--- Controls ---", y_pos, GLUT_BITMAP_HELVETICA_12, (0.6, 0.6, 0.6))
+    y_pos -= 22
+    
+    for key, action in instructions:
+        label = f"{key:>8}  -  {action}"
+        draw_centered_text(label, y_pos, GLUT_BITMAP_9_BY_15, (0.75, 0.75, 0.75))
+        y_pos -= 20
+    
+    # Game rules hint at bottom
+    draw_centered_text("Survive the Red Light. Reach the finish line.", 40, GLUT_BITMAP_HELVETICA_12, (0.5, 0.5, 0.5))
     
     glEnable(GL_LIGHTING)
     glEnable(GL_DEPTH_TEST)
@@ -1712,6 +1949,7 @@ def update_state():
     global player_speed_boost_active, player_speed_boost_timer, player_move_speed
     global STATE_CHANGE_INTERVAL_MIN, STATE_CHANGE_INTERVAL_MAX
     global notification_text, notification_timer
+    global player_shield_active, player_shield_timer
     
     current_time = time.time()
     delta_time = current_time - last_update_time
@@ -1743,14 +1981,21 @@ def update_state():
     
     # Handle start screen
     if GAME_STATE == "start":
-        # Check for mouse click on start button
-        if b' ' in keys_pressed:  # Use space to start for simplicity
+        # Press Enter to start the game (Space is reserved for shooting)
+        if b'\r' in keys_pressed or b'\n' in keys_pressed:
             start_game()
+            keys_pressed.discard(b'\r')
+            keys_pressed.discard(b'\n')
             
         glutPostRedisplay()
         return
     
-    # Calculate survival time
+    # Skip updates if player was caught or won (freeze game state)
+    if player_was_caught or player_reached_finish:
+        glutPostRedisplay()
+        return
+    
+    # Calculate survival time (only while alive)
     time_survived = current_time - GAME_START_TIME
     
     # Update game difficulty based on phase
@@ -1763,27 +2008,22 @@ def update_state():
         print(f"Increasing difficulty to phase {GAME_PHASE}!")
         print(f"New timing: {STATE_CHANGE_INTERVAL_MIN:.1f}s - {STATE_CHANGE_INTERVAL_MAX:.1f}s")
     
-    # Skip updates if player was caught or won
-    if player_was_caught or player_reached_finish:
-        glutPostRedisplay()
-        return
-    
     # Update game state timer
     STATE_TIMER += delta_time
     if STATE_TIMER >= NEXT_STATE_CHANGE:
-        if GAME_STATE == "green":
-            # First change to yellow warning
-            GAME_STATE = "yellow"
-            NEXT_STATE_CHANGE = 5.0  # Fixed 5-second yellow warning
-            STATE_TIMER = 0
-            show_notification("WARNING! Yellow light!")
-        elif GAME_STATE == "yellow":
+        if GAME_STATE == "yellow":
             # Then change to red
             GAME_STATE = "red"
             DOLL_TARGET_ROTATION = 0  # Face player
             NEXT_STATE_CHANGE = random.uniform(STATE_CHANGE_INTERVAL_MIN, STATE_CHANGE_INTERVAL_MAX)
             STATE_TIMER = 0
             show_notification("RED LIGHT! Stop moving!")
+        elif GAME_STATE == "green":
+            # First change to yellow warning
+            GAME_STATE = "yellow"
+            NEXT_STATE_CHANGE = 5.0  # Fixed 5-second yellow warning
+            STATE_TIMER = 0
+            show_notification("WARNING! Yellow light!")
         else:
             # Change back to green
             GAME_STATE = "green"
@@ -1842,29 +2082,101 @@ def update_state():
     player_is_moving = False
     
     # Determine acceleration based on input
+    current_speed = player_move_speed
+    
+    global player_is_sprinting, player_stamina
+    
+    # Check movement keys FIRST to set player_is_moving
     if b'w' in keys_pressed:
-        accel_x += move_forward_x * player_move_speed
-        accel_y += move_forward_y * player_move_speed
+        accel_x += move_forward_x
+        accel_y += move_forward_y
         player_is_moving = True
         
     if b's' in keys_pressed:
-        accel_x -= move_forward_x * player_move_speed
-        accel_y -= move_forward_y * player_move_speed
+        accel_x -= move_forward_x
+        accel_y -= move_forward_y
         player_is_moving = True
         
     if b'a' in keys_pressed:
-        accel_x -= move_right_x * player_move_speed
-        accel_y -= move_right_y * player_move_speed
+        accel_x -= move_right_x
+        accel_y -= move_right_y
         player_is_moving = True
         
     if b'd' in keys_pressed:
-        accel_x += move_right_x * player_move_speed
-        accel_y += move_right_y * player_move_speed
+        accel_x += move_right_x
+        accel_y += move_right_y
         player_is_moving = True
     
-    # Apply friction to current velocity
-    player_velocity[0] *= player_friction
-    player_velocity[1] *= player_friction
+    # Check for sprint (Shift key) - AFTER movement checks so player_is_moving is correct
+    global sprint_key_held
+    global sprint_exhausted, sprint_cooldown_timer
+    
+    if sprint_key_held:
+        player_is_sprinting = True
+    else:
+        player_is_sprinting = False
+    
+    # Sprint exhaustion cooldown
+    if sprint_exhausted:
+        sprint_cooldown_timer -= delta_time
+        if sprint_cooldown_timer <= 0:
+            sprint_exhausted = False
+            sprint_cooldown_timer = 0
+            show_notification("Sprint recovered!")
+        # Force no sprint during cooldown AND apply speed penalty
+        player_is_sprinting = False
+        current_speed *= SPRINT_EXHAUSTED_SPEED_MULT
+    
+    # Sprint logic
+    if player_is_sprinting and player_stamina > 0 and player_is_moving and not sprint_exhausted:
+        current_speed *= sprint_multiplier
+        player_stamina -= player_stamina_drain * delta_time
+        if player_stamina <= 0: 
+            player_stamina = 0
+            player_is_sprinting = False
+            sprint_exhausted = True
+            sprint_cooldown_timer = SPRINT_COOLDOWN_DURATION
+            show_notification("EXHAUSTED! Slowed for 4s!")
+    else:
+        # Regenerate stamina (only if not exhausted)
+        if not sprint_exhausted and player_stamina < player_max_stamina:
+            player_stamina += player_stamina_regen * delta_time
+            if player_stamina > player_max_stamina:
+                player_stamina = player_max_stamina
+    
+    # Jump logic
+    global player_z_velocity, player_is_jumping, player_on_ground, player_ground_z
+    
+    if b'j' in keys_pressed and player_on_ground and not player_is_jumping:
+        player_z_velocity = JUMP_FORCE
+        player_is_jumping = True
+        player_on_ground = False
+        keys_pressed.discard(b'j')  # Single press jump
+    
+    # Apply gravity
+    if not player_on_ground:
+        player_z_velocity -= GRAVITY * delta_time
+        player_position[2] += player_z_velocity * delta_time
+        target_player_position[2] += player_z_velocity * delta_time
+        
+        # Check ground collision
+        if player_position[2] <= player_ground_z:
+            player_position[2] = player_ground_z
+            target_player_position[2] = player_ground_z
+            player_z_velocity = 0.0
+            player_on_ground = True
+            player_is_jumping = False
+
+    # Apply speed to acceleration direction
+    accel_x *= current_speed
+    accel_y *= current_speed
+    
+    # Apply friction to current velocity (Frame-rate independent)
+    # 0.88 is the base friction for 60 FPS (approx 16.6ms)
+    # Formula: new_vel = old_vel * (base_friction ^ (dt * 60))
+    friction_factor = pow(player_friction, delta_time * 60.0)
+    player_velocity[0] *= friction_factor
+    player_velocity[1] *= friction_factor
     
     # Apply acceleration to velocity
     if player_is_moving:
@@ -1969,19 +2281,39 @@ def update_state():
     # Update enemies
     update_enemies(delta_time)
     
+    # Update enemy bullets
+    update_enemy_bullets(delta_time)
+    
+    # Update shield timer
+    global player_shield_active, player_shield_timer
+    if player_shield_active:
+        player_shield_timer -= delta_time
+        if player_shield_timer <= 0:
+            player_shield_active = False
+            show_notification("Shield expired!")
+    
     # Update powerups
     update_powerups(delta_time)
     
-    # Check for collisions
-    check_collisions()
+    # Update Screen Shake
+    global shake_timer, camera_shake_x, camera_shake_y, shake_intensity
+    if shake_timer > 0:
+        shake_timer -= delta_time
+        camera_shake_x = random.uniform(-shake_intensity, shake_intensity)
+        camera_shake_y = random.uniform(-shake_intensity, shake_intensity)
+        shake_intensity *= 0.9 # Decay
+    else:
+        camera_shake_x = 0
+        camera_shake_y = 0
     
-    # Check for win condition (reaching finish line)
-    if player_position[1] >= PLAY_AREA_LENGTH / 2:
-        player_reached_finish = True
-        # Calculate final score
-        player_score += 10000  # Win bonus
-        player_score += int(1000 / (time_survived / 60.0))  # Time bonus (better for faster completion)
-        print(f"Congratulations! You reached the finish line! Final score: {player_score}")
+    # Particle system disabled for stability
+    # update_particles(delta_time)
+
+
+
+    
+    # Check for collisions (includes win condition check)
+    check_collisions()
     
     # Store last positions for movement detection
     last_positions['player'] = list(player_position)
@@ -1996,16 +2328,51 @@ def start_game():
     """Start the game from the starting screen."""
     global GAME_STATE, player_position, target_player_position, GAME_START_TIME
     global player_score, time_survived, enemies_killed, player_move_speed
+    global STATE_TIMER, NEXT_STATE_CHANGE, DOLL_CURRENT_ROTATION, DOLL_TARGET_ROTATION
+    global player_was_caught, player_reached_finish, player_velocity, GAME_PHASE
+    global player_speed_boost_active, player_speed_boost_timer, player_stamina
+    global player_direction, target_player_direction, bullets, powerups, powerup_spawn_timer
+    global player_is_sprinting, sprint_key_held
+    global sprint_exhausted, sprint_cooldown_timer
+    global player_z_velocity, player_is_jumping, player_on_ground
+    global player_shield_active, player_shield_timer, enemy_bullets
+    global CURRENT_LEVEL, name_entry_active, player_name_input
     
     # Reset player
     player_position = list(player_start_pos)
     target_player_position = list(player_start_pos)
+    player_direction = 90.0
+    target_player_direction = 90.0
+    player_was_caught = False
+    player_reached_finish = False
+    player_velocity = [0.0, 0.0, 0.0]
+    player_stamina = player_max_stamina
+    player_is_sprinting = False
+    sprint_key_held = False
+    sprint_exhausted = False
+    sprint_cooldown_timer = 0.0
+    player_z_velocity = 0.0
+    player_is_jumping = False
+    player_on_ground = True
+    player_position[2] = player_ground_z
+    
+    # Reset shield
+    player_shield_active = False
+    player_shield_timer = 0.0
+    
+    # Reset name entry
+    name_entry_active = False
+    player_name_input = ""
     
     # Reset game state
     GAME_STATE = "green"
     STATE_TIMER = 0
-    NEXT_STATE_CHANGE = random.uniform(STATE_CHANGE_INTERVAL_MIN * 1.5, STATE_CHANGE_INTERVAL_MAX * 1.5)  # Extra time for first green light
+    NEXT_STATE_CHANGE = random.uniform(STATE_CHANGE_INTERVAL_MIN * 1.5, STATE_CHANGE_INTERVAL_MAX * 1.5)
+    DOLL_CURRENT_ROTATION = 180
+    DOLL_TARGET_ROTATION = 180
     GAME_START_TIME = time.time()
+    GAME_PHASE = 1
+    CURRENT_LEVEL = 1
     
     # Reset scoring
     player_score = 0
@@ -2014,7 +2381,12 @@ def start_game():
     
     # Reset speed boost
     player_speed_boost_active = False
+    player_speed_boost_timer = 0.0
     player_move_speed = player_base_speed
+    
+    # Clear bullets
+    bullets = []
+    enemy_bullets = []
     
     # Initialize enemies
     setup_enemies()
@@ -2039,6 +2411,7 @@ def show_notification(text):
 def fire_weapon():
     """Create a new bullet fired from the player."""
     global bullets
+    global shake_timer, shake_intensity # Added for recoil
     
     # Calculate bullet direction based on player orientation
     angle_rad = math.radians(player_direction)
@@ -2060,6 +2433,11 @@ def fire_weapon():
     
     bullets.append(bullet)
     show_notification("Bullet fired!")
+
+    # Add recoil/shake (reduced for stability)
+    shake_timer = 0.15
+    shake_intensity = 1.5
+
 
 def update_bullets(delta_time):
     """Move bullets and handle their lifetime."""
@@ -2093,7 +2471,7 @@ def update_bullets(delta_time):
 
 def update_enemies(delta_time):
     """Update enemy positions and check for red light violations."""
-    global enemies, player_position
+    global enemies, player_position, player_score, enemies_killed
     
     for enemy in enemies:
         if not enemy['alive']:
@@ -2164,9 +2542,80 @@ def update_enemies(delta_time):
                     player_score += 500
                 
                 enemies_killed += 1
+        
+        # Enemy shooting logic
+        if enemy.get('can_shoot', False) and enemy['alive']:
+            enemy['shoot_timer'] -= delta_time
+            if enemy['shoot_timer'] <= 0:
+                # Shoot at player
+                dx = player_position[0] - enemy['position'][0]
+                dy = player_position[1] - enemy['position'][1]
+                dist = math.sqrt(dx*dx + dy*dy)
+                
+                if dist > 0 and dist < 5000:  # Only shoot if within range
+                    # Add slight inaccuracy so player can dodge
+                    aim_jitter = random.uniform(-15, 15)
+                    angle = math.degrees(math.atan2(dy, dx)) + aim_jitter
+                    
+                    eb = {
+                        'position': [enemy['position'][0], enemy['position'][1], ENEMY_HEIGHT * 0.5],
+                        'direction': angle,
+                        'lifetime': 6.0,
+                        'size': ENEMY_BULLET_SIZE,
+                        'color': enemy['color'],
+                    }
+                    enemy_bullets.append(eb)
+                
+                # Reset timer (faster at higher levels)
+                interval_mult = max(0.5, 1.0 - CURRENT_LEVEL * 0.1)
+                enemy['shoot_timer'] = random.uniform(
+                    ENEMY_SHOOT_INTERVAL_MIN * interval_mult,
+                    ENEMY_SHOOT_INTERVAL_MAX * interval_mult
+                )
 
-def update_powerups(delta_time):
-    """Update power-ups and handle rotations."""
+def update_enemy_bullets(delta_time):
+    """Move enemy bullets, check collisions with player."""
+    global enemy_bullets, player_was_caught, player_shield_active
+    
+    for eb in enemy_bullets[:]:
+        angle_rad = math.radians(eb['direction'])
+        eb['position'][0] += ENEMY_BULLET_SPEED * math.cos(angle_rad) * delta_time
+        eb['position'][1] += ENEMY_BULLET_SPEED * math.sin(angle_rad) * delta_time
+        
+        eb['lifetime'] -= delta_time
+        if eb['lifetime'] <= 0:
+            enemy_bullets.remove(eb)
+            continue
+        
+        # Out of bounds check
+        if (abs(eb['position'][0]) > PLAY_AREA_WIDTH / 2 + 200 or 
+            abs(eb['position'][1]) > PLAY_AREA_LENGTH / 2 + 200):
+            enemy_bullets.remove(eb)
+            continue
+        
+        # Check collision with player
+        dx = player_position[0] - eb['position'][0]
+        dy = player_position[1] - eb['position'][1]
+        dz = player_position[2] - eb['position'][2]
+        dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+        
+        hit_radius = player_width + eb['size']
+        
+        # Player can jump over bullets - if Z difference is large, skip
+        if abs(dz) > ENEMY_HEIGHT * 0.8:
+            continue
+        
+        if dist < hit_radius:
+            if player_shield_active:
+                # Shield absorbs the hit
+                show_notification("Shield blocked enemy bullet!")
+                enemy_bullets.remove(eb)
+                continue
+            else:
+                # Player is hit
+                player_was_caught = True
+                print("Hit by enemy bullet! Game over.")
+                return
     global powerups
     
     for powerup in powerups:
@@ -2180,6 +2629,13 @@ def update_powerups(delta_time):
         if powerup['rotation'] >= 360.0:
             powerup['rotation'] -= 360.0
 
+def update_powerups(delta_time):
+    """Update powerup animations (rotation and bobbing)."""
+    for powerup in powerups:
+        if powerup['active']:
+            powerup['rotation'] = (powerup.get('rotation', 0) + 90 * delta_time) % 360
+
+
 def spawn_powerup():
     """Spawn a new powerup in the playing field."""
     global powerups
@@ -2192,23 +2648,23 @@ def spawn_powerup():
     # Find inactive powerup to reuse
     for powerup in powerups:
         if not powerup['active']:
-            # Reposition and activate
             half_play_w = PLAY_AREA_WIDTH / 2 - 100
             powerup['position'][0] = random.uniform(-half_play_w, half_play_w)
             powerup['position'][1] = random.uniform(-PLAY_AREA_LENGTH / 4, PLAY_AREA_LENGTH / 2 - 500)
+            powerup['type'] = random.choice(POWERUP_TYPES)
             powerup['rotation'] = 0.0
             powerup['active'] = True
             return
     
     # If no inactive powerups, create a new one
-    if len(powerups) < NUM_POWERUPS * 2:  # Cap total number
+    if len(powerups) < NUM_POWERUPS * 2:
         half_play_w = PLAY_AREA_WIDTH / 2 - 100
         x = random.uniform(-half_play_w, half_play_w)
         y = random.uniform(-PLAY_AREA_LENGTH / 4, PLAY_AREA_LENGTH / 2 - 500)
         
         new_powerup = {
             'position': [x, y, 15],
-            'type': 'speed',
+            'type': random.choice(POWERUP_TYPES),
             'active': True,
             'rotation': 0.0
         }
@@ -2219,6 +2675,9 @@ def check_collisions():
     global bullets, enemies, player_position, player_was_caught, powerups
     global player_speed_boost_active, player_speed_boost_timer, player_move_speed
     global player_score, enemies_killed, player_reached_finish
+    global shake_timer, shake_intensity
+    global name_entry_active, player_name_input
+    global player_shield_active, player_shield_timer
     
     # Check if player reached finish line - with a more lenient check
     # If player is within 95% of the way to the finish line, count it as a win
@@ -2228,16 +2687,28 @@ def check_collisions():
     current_distance = player_position[1] - start_y
     progress = current_distance / total_distance
     
-    # More forgiving win condition - 95% of the way counts as a win
+    # Win condition - reach the finish line
     if progress >= 0.95:
         player_reached_finish = True
+        # Teleport player to exact finish so progress shows 100%
+        player_position[1] = PLAY_AREA_LENGTH / 2
+        target_player_position[1] = PLAY_AREA_LENGTH / 2
         # Calculate final score
-        player_score += 10000  # Win bonus
-        player_score += int(1000 / (time_survived / 60.0))  # Time bonus (better for faster completion)
-        print(f"Congratulations! You reached the finish line! Final score: {player_score}")
+        time_bonus = int(max(100, 1000 / max(0.1, time_survived / 60.0)))
+        phase_bonus = GAME_PHASE * 500
+        kill_bonus = enemies_killed * 150
+        level_bonus = CURRENT_LEVEL * 1000
+        player_score += 10000 + time_bonus + phase_bonus + kill_bonus + level_bonus
+        # Activate name entry for high score
+        name_entry_active = True
+        player_name_input = ""
+        print(f"YOU WIN! Final Score: {player_score} (Time: {time_bonus}, Phase: {phase_bonus}, Kills: {kill_bonus}, Level: {level_bonus})")
         return  # Skip other collision checks if player won
     
     # Check bullet-enemy collisions
+    bullets_to_remove = []
+    hit_enemies = set()
+    
     for bullet in bullets[:]:
         hit_detected = False
         
@@ -2266,7 +2737,7 @@ def check_collisions():
                 move_y = bullet['position'][1] - bullet['last_position'][1]
                 move_z = bullet['position'][2] - bullet['last_position'][2]
                 
-                # Vector from last position to enemy center
+                # Vector from bullet's last position to enemy center
                 to_enemy_x = enemy['position'][0] - bullet['last_position'][0]
                 to_enemy_y = enemy['position'][1] - bullet['last_position'][1]
                 to_enemy_z = enemy['position'][2] - bullet['last_position'][2]
@@ -2317,15 +2788,21 @@ def check_collisions():
                         # Add score for enemy elimination
                         if enemy['type'] == 'red':
                             player_score += 100
-                            show_notification("Red enemy eliminated! +100 points")
                         elif enemy['type'] == 'blue':
                             player_score += 200
-                            show_notification("Blue enemy eliminated! +200 points")
                         else:  # black
                             player_score += 500
-                            show_notification("Black enemy eliminated! +500 points")
+                        
+                        # Particle effects disabled for stability
+                        # spawn_particles(enemy['position'], enemy['color'], 12)
+                        
+                        # Big shake on enemy death
+                        global shake_timer, shake_intensity
+                        shake_timer = 0.2  # Reduced intensity
+                        shake_intensity = 3.0  # Reduced from 5.0
                         
                         enemies_killed += 1
+                        show_notification(f"Enemy eliminated! ({enemy['type']})")
                         print(f"Enemy eliminated! ({enemy['type']})")
                     else:
                         if enemy['type'] == 'blue':
@@ -2334,33 +2811,50 @@ def check_collisions():
                             show_notification(f"Black enemy hit! {enemy['health']}/5 health")
                         print(f"Enemy hit! Health: {enemy['health']} remaining")
                     
-                    # Remove bullet
-                    if bullet in bullets:
-                        bullets.remove(bullet)
+                    # Mark bullet for removal
+                    bullets_to_remove.append(bullet)
                     
-                    break  # Stop checking other enemies once we've hit one
-            
-        if hit_detected:
-            continue  # Skip to next bullet if we already hit something
-            
+                    # Track hit for this enemy for this frame
+                    hit_enemies.add(id(enemy))
+                    break  # Bullet can only hit one enemy
+    
+    # Remove hit bullets
+    for bullet in bullets_to_remove:
+        if bullet in bullets:
+            bullets.remove(bullet)
+    
     # Check player-enemy collisions
     for enemy in enemies:
         if not enemy['alive']:
             continue
             
-        # Calculate distance
+        # Calculate XY distance
         dx = player_position[0] - enemy['position'][0]
         dy = player_position[1] - enemy['position'][1]
         distance = math.sqrt(dx*dx + dy*dy)
         
         # Adjust collision radius for black enemies
         enemy_width = ENEMY_WIDTH * enemy.get('scale', 1.0)
+        enemy_top_z = enemy['position'][2] + ENEMY_HEIGHT * enemy.get('scale', 1.0)
+        
+        # Skip collision if player jumped above the enemy
+        if player_position[2] > enemy_top_z + 10:
+            continue
         
         # Check for collision
         if distance < player_width + enemy_width:
-            player_was_caught = True
-            print("An enemy caught you! Game over.")
-            break
+            if player_shield_active:
+                # Shield absorbs the hit - destroy enemy and keep going!
+                enemy['alive'] = False
+                enemies_killed += 1
+                player_score += 300
+                show_notification("SHIELD DESTROYED ENEMY!")
+                shake_timer = 0.3
+                shake_intensity = 4.0
+            else:
+                player_was_caught = True
+                print("An enemy caught you! Game over.")
+                break
     
     # Check player-powerup collisions
     for powerup in powerups:
@@ -2379,57 +2873,14 @@ def check_collisions():
             if powerup['type'] == 'speed':
                 player_speed_boost_active = True
                 player_speed_boost_timer = player_speed_boost_duration
-                player_move_speed = player_base_speed * 1.7  # 70% speed boost
-                show_notification("SPEED BOOST ACTIVATED! Run faster!")
-                print("Speed boost activated!")
-                
-                # Add score
+                player_move_speed = player_base_speed * 1.7
+                show_notification("SPEED BOOST ACTIVATED! +70% speed!")
                 player_score += 50
-            
-            # Deactivate powerup
-            powerup['active'] = False
-    
-    # Check player-enemy collisions
-    for enemy in enemies:
-        if not enemy['alive']:
-            continue
-            
-        # Calculate distance
-        dx = player_position[0] - enemy['position'][0]
-        dy = player_position[1] - enemy['position'][1]
-        distance = math.sqrt(dx*dx + dy*dy)
-        
-        # Adjust collision radius for black enemies
-        enemy_width = ENEMY_WIDTH * enemy.get('scale', 1.0)
-        
-        # Check for collision
-        if distance < player_width + enemy_width:
-            player_was_caught = True
-            print("An enemy caught you! Game over.")
-            break
-    
-    # Check player-powerup collisions
-    for powerup in powerups:
-        if not powerup['active']:
-            continue
-            
-        # Calculate distance
-        dx = player_position[0] - powerup['position'][0]
-        dy = player_position[1] - powerup['position'][1]
-        dz = player_position[2] - powerup['position'][2]
-        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
-        
-        # Check for collision
-        if distance < player_width + 15:  # 15 = powerup radius
-            # Apply powerup effect
-            if powerup['type'] == 'speed':
-                player_speed_boost_active = True
-                player_speed_boost_timer = player_speed_boost_duration
-                player_move_speed = player_base_speed * 1.7  # 70% speed boost
-                print("Speed boost activated!")
-                
-                # Add score
-                player_score += 50
+            elif powerup['type'] == 'shield':
+                player_shield_active = True
+                player_shield_timer = SHIELD_DURATION
+                show_notification("SHIELD ACTIVATED! Invincible for 6s!")
+                player_score += 75
             
             # Deactivate powerup
             powerup['active'] = False
@@ -2480,22 +2931,57 @@ def setup_camera():
 # --- Event Handlers ---
 def key_pressed(key, x, y):
     """Handle keyboard key press events."""
-    global keys_pressed, print_debug
+    global keys_pressed, print_debug, sprint_key_held
+    global name_entry_active, player_name_input, high_scores
+    
+    # Handle name entry mode
+    if name_entry_active:
+        if key == b'\r' or key == b'\n':
+            # Submit name
+            if player_name_input.strip():
+                high_scores.append((player_name_input.strip(), player_score))
+                high_scores.sort(key=lambda x: x[1], reverse=True)
+                high_scores = high_scores[:MAX_HIGH_SCORES]
+                print(f"High score saved: {player_name_input.strip()} - {player_score}")
+            name_entry_active = False
+            return
+        elif key == b'\x08' or key == b'\x7f':  # Backspace/Delete
+            player_name_input = player_name_input[:-1]
+            return
+        elif key == b'\x1b':  # ESC to cancel
+            name_entry_active = False
+            return
+        else:
+            # Add character (limit to 15 chars, printable only)
+            try:
+                ch = key.decode('utf-8')
+                if len(player_name_input) < 15 and ch.isprintable():
+                    player_name_input += ch
+            except:
+                pass
+            return
     
     keys_pressed.add(key.lower())
     
-    # ESC to exit
+    # Detect Shift via glutGetModifiers (safe in key-down callbacks)
+    try:
+        mods = glutGetModifiers()
+        sprint_key_held = bool(mods & GLUT_ACTIVE_SHIFT)
+    except:
+        pass
+    
+    # ESC to exit game
     if key == b'\x1b':
-        # First try with glutLeaveMainLoop, fall back to sys.exit if not available
+        # ESC key - Try to exit gracefully
         try:
-            if bool(glutLeaveMainLoop):  # Check if function exists
-                glutLeaveMainLoop()
-            else:
+            glutLeaveMainLoop()
+        except:
+            # If glutLeaveMainLoop doesn't exist, destroy window
+            try:
+                glutDestroyWindow(glutGetWindow())
+            except:
                 import sys
                 sys.exit(0)
-        except:
-            import sys
-            sys.exit(0)
         
     # P to toggle debug info
     if key == b'p':
@@ -2505,18 +2991,105 @@ def key_pressed(key, x, y):
     # R to restart the game
     if key == b'r':
         restart_game()
+    
+    # N to advance to next level (only when won and name entry is done)
+    if key == b'n' and player_reached_finish and not name_entry_active:
+        next_level()
 
 def key_released(key, x, y):
     """Handle keyboard key release events."""
+    global sprint_key_held
     keys_pressed.discard(key.lower())
+    # Note: glutGetModifiers() crashes in up-callbacks on macOS
+    # Shift release is detected via key_pressed modifier checks instead
+    # If no movement keys are pressed, sprint doesn't matter
 
 def special_key_pressed(key, x, y):
-    """Handle special key press events (arrow keys, etc.)."""
+    """Handle special key press events (arrow keys, Shift, etc.)."""
+    global sprint_key_held
     keys_pressed.add(key)
+    # Detect Shift via glutGetModifiers (safe in key-down callbacks)
+    try:
+        mods = glutGetModifiers()
+        sprint_key_held = bool(mods & GLUT_ACTIVE_SHIFT)
+    except:
+        pass
 
 def special_key_released(key, x, y):
     """Handle special key release events."""
+    global sprint_key_held
     keys_pressed.discard(key)
+    # Note: glutGetModifiers() crashes in up-callbacks on macOS
+    # We can't directly detect Shift release here
+    # But key_pressed modifier checks handle it on next keypress
+
+def next_level():
+    """Advance to the next level, keeping score and high scores."""
+    global player_position, target_player_position, player_direction, target_player_direction
+    global player_was_caught, player_reached_finish, GAME_STATE, STATE_TIMER, NEXT_STATE_CHANGE
+    global DOLL_CURRENT_ROTATION, DOLL_TARGET_ROTATION, bullets, enemies
+    global GAME_START_TIME, GAME_PHASE
+    global player_velocity, powerups, player_speed_boost_active, player_move_speed
+    global STATE_CHANGE_INTERVAL_MIN, STATE_CHANGE_INTERVAL_MAX
+    global player_stamina, player_is_sprinting, sprint_key_held
+    global sprint_exhausted, sprint_cooldown_timer
+    global player_z_velocity, player_is_jumping, player_on_ground
+    global player_shield_active, player_shield_timer, enemy_bullets
+    global CURRENT_LEVEL, name_entry_active, player_name_input
+    
+    CURRENT_LEVEL += 1
+    
+    # Reset player position but keep score
+    player_position = list(player_start_pos)
+    target_player_position = list(player_start_pos)
+    player_direction = 90.0
+    target_player_direction = 90.0
+    player_was_caught = False
+    player_reached_finish = False
+    player_velocity = [0.0, 0.0, 0.0]
+    player_stamina = player_max_stamina
+    player_is_sprinting = False
+    sprint_key_held = False
+    sprint_exhausted = False
+    sprint_cooldown_timer = 0.0
+    player_z_velocity = 0.0
+    player_is_jumping = False
+    player_on_ground = True
+    player_position[2] = player_ground_z
+    
+    # Reset shield
+    player_shield_active = False
+    player_shield_timer = 0.0
+    
+    # Reset name entry
+    name_entry_active = False
+    player_name_input = ""
+    
+    # Reset speed boost
+    player_speed_boost_active = False
+    player_move_speed = player_base_speed
+    
+    # Reset game state - make state changes faster each level
+    GAME_STATE = "green"
+    STATE_TIMER = 0
+    STATE_CHANGE_INTERVAL_MIN = max(1.5, 3.0 - (CURRENT_LEVEL - 1) * 0.3)
+    STATE_CHANGE_INTERVAL_MAX = max(3.0, 7.0 - (CURRENT_LEVEL - 1) * 0.5)
+    NEXT_STATE_CHANGE = random.uniform(STATE_CHANGE_INTERVAL_MIN, STATE_CHANGE_INTERVAL_MAX)
+    DOLL_CURRENT_ROTATION = 180
+    DOLL_TARGET_ROTATION = 180
+    GAME_START_TIME = time.time()
+    GAME_PHASE = 1
+    
+    # Clear bullets
+    bullets.clear()
+    enemy_bullets.clear()
+    
+    # Regenerate enemies and powerups (scaled to new level)
+    setup_enemies()
+    setup_powerups()
+    
+    print(f"Advanced to Level {CURRENT_LEVEL}!")
+
 
 def restart_game():
     """Reset the game to its initial state."""
@@ -2526,6 +3099,11 @@ def restart_game():
     global player_score, time_survived, enemies_killed, GAME_START_TIME, GAME_PHASE
     global player_velocity, powerups, player_speed_boost_active, player_move_speed
     global STATE_CHANGE_INTERVAL_MIN, STATE_CHANGE_INTERVAL_MAX
+    global player_stamina, player_is_sprinting, sprint_key_held
+    global sprint_exhausted, sprint_cooldown_timer
+    global player_z_velocity, player_is_jumping, player_on_ground
+    global player_shield_active, player_shield_timer, enemy_bullets
+    global CURRENT_LEVEL, name_entry_active, player_name_input
     
     # Reset player
     player_position = list(player_start_pos)
@@ -2535,6 +3113,23 @@ def restart_game():
     player_was_caught = False
     player_reached_finish = False
     player_velocity = [0.0, 0.0, 0.0]
+    player_stamina = player_max_stamina
+    player_is_sprinting = False
+    sprint_key_held = False
+    sprint_exhausted = False
+    sprint_cooldown_timer = 0.0
+    player_z_velocity = 0.0
+    player_is_jumping = False
+    player_on_ground = True
+    player_position[2] = player_ground_z
+    
+    # Reset shield
+    player_shield_active = False
+    player_shield_timer = 0.0
+    
+    # Reset name entry
+    name_entry_active = False
+    player_name_input = ""
     
     # Reset speed boost
     player_speed_boost_active = False
@@ -2548,6 +3143,7 @@ def restart_game():
     DOLL_TARGET_ROTATION = 180
     GAME_START_TIME = time.time()
     GAME_PHASE = 1
+    CURRENT_LEVEL = 1
     
     # Reset difficulty parameters to initial values
     STATE_CHANGE_INTERVAL_MIN = 3.0
@@ -2560,6 +3156,7 @@ def restart_game():
     
     # Clear bullets
     bullets.clear()
+    enemy_bullets.clear()
     
     # Reset enemies
     setup_enemies()
@@ -2596,6 +3193,12 @@ def display():
     # Set up camera view
     setup_camera()
     
+    # Apply Screen Shake
+    if shake_timer > 0:
+        glMatrixMode(GL_MODELVIEW)
+        glTranslatef(camera_shake_x, camera_shake_y, 0)
+
+    
     # Draw sun
     draw_fixed_sun()
     
@@ -2603,8 +3206,12 @@ def display():
     glEnable(GL_FOG)
     
     # Draw environment elements
-    draw_fixed_plants()
-    draw_field()
+    if environment_display_list:
+        glCallList(environment_display_list)
+    else:
+        # Fallback if list not created yet
+        draw_fixed_plants()
+        draw_field()
     draw_giant_doll()
     
     # Draw game entities
@@ -2612,13 +3219,23 @@ def display():
         if powerup['active']:
             draw_powerup(powerup)
     
+    # Particle rendering disabled for stability
+    # (Particles were causing GLUT callback crashes)
+
     for enemy in enemies:
         draw_enemy(enemy)
     
     draw_player()
     
+    # Draw shield effect around player
+    draw_shield_effect()
+    
     for bullet in bullets:
         draw_bullet(bullet)
+    
+    # Draw enemy bullets
+    for eb in enemy_bullets:
+        draw_enemy_bullet(eb)
     
     # Disable fog for UI elements
     glDisable(GL_FOG)
@@ -2635,6 +3252,25 @@ def display():
     
     glDisable(GL_DEPTH_TEST)
     glDisable(GL_LIGHTING)
+    
+    # Red Light Tint/Vignette Effect
+    if GAME_STATE == "red" and DOLL_CURRENT_ROTATION < 45:
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
+        # Pulsing red overlay
+        pulse = 0.15 + 0.10 * math.sin(time.time() * 3.0)
+        glColor4f(1.0, 0.0, 0.0, pulse)
+        
+        glBegin(GL_QUADS)
+        glVertex2f(0, 0)
+        glVertex2f(window_width, 0)
+        glVertex2f(window_width, window_height)
+        glVertex2f(0, window_height)
+        glEnd()
+        
+        glDisable(GL_BLEND)
+
     
     # Create semi-transparent background for text to improve readability
     def draw_text_background(x, y, width, height, alpha=0.6):
@@ -2681,248 +3317,358 @@ def display():
         for char in text:
             glutBitmapCharacter(font, ord(char))
     
-    # Draw title and fps - using more visible text colors and fonts
-    title_color = (1.0, 0.2, 0.2) if GAME_STATE == "red" else (0.2, 0.9, 0.2)
-    if GAME_STATE == "yellow":
-        title_color = (1.0, 0.9, 0.1)  # Yellow for warning
+    # --- CLEAN UI LAYOUT ---
+    # Layout:
+    #   Top-left:     Score panel (compact)
+    #   Top-right:    Stats panel (compact)  
+    #   Top-center:   Light state + phase timer
+    #   Mid-center:   Notifications (below top-center)
+    #   Bottom:       Progress bar (very bottom), Stamina bar (above it)
+    #   Controls:     Minimal at very bottom-left
+    #   Game Over/Win: Full-screen centered overlay
     
-    # Background for top information bar
-    draw_text_background(0, WINDOW_HEIGHT - 40, WINDOW_WIDTH, 40)
-    draw_scaled_text(10, WINDOW_HEIGHT - 25, f"{GAME_TITLE} - FPS: {fps}", GLUT_BITMAP_HELVETICA_18, title_color)
+    # Helper: measure text width  
+    def text_w(text, font=GLUT_BITMAP_HELVETICA_18):
+        w = 0
+        for c in text:
+            w += glutBitmapWidth(font, ord(c))
+        return w
     
-    # Draw game state indicator with translated Korean text - using larger font with background
-    if GAME_STATE == "red":
-        state_text = DIALOGUE_RED_LIGHT
-        state_color = (1.0, 0.2, 0.2)
-    elif GAME_STATE == "yellow":
-        state_text = DIALOGUE_YELLOW_WARNING
-        state_color = (1.0, 0.9, 0.1)
-    else:  # green
-        state_text = DIALOGUE_GREEN_LIGHT
-        state_color = (0.2, 1.0, 0.2)
-    
-    # Background for game state text
-    text_width = 0
-    for char in state_text:
-        text_width += glutBitmapWidth(GLUT_BITMAP_TIMES_ROMAN_24, ord(char))
-    x_pos = (WINDOW_WIDTH - text_width) // 2
-    
-    draw_text_background(x_pos - 10, WINDOW_HEIGHT - 90, text_width + 20, 30)
-    
-    # Draw the actual text with high contrast
-    draw_scaled_centered_text(state_text, WINDOW_HEIGHT - 75, GLUT_BITMAP_TIMES_ROMAN_24, state_color)
-    
-    # Draw countdown timer for state change with background
-    time_left = NEXT_STATE_CHANGE - STATE_TIMER
-    time_left_text = f"TIME: {time_left:.1f}s"
-    
-    text_width = 0
-    for char in time_left_text:
-        text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-    x_pos = (WINDOW_WIDTH - text_width) // 2
-    
-    draw_text_background(x_pos - 5, WINDOW_HEIGHT - 125, text_width + 10, 25)
-    draw_scaled_centered_text(time_left_text, WINDOW_HEIGHT - 115, GLUT_BITMAP_HELVETICA_18, state_color)
-    
-    # Draw number of remaining bullets with background
-    bullets_text = f"BULLETS: {len(bullets)}"
-    text_width = 0
-    for char in bullets_text:
-        text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-    
-    draw_text_background(WINDOW_WIDTH - text_width - 25, WINDOW_HEIGHT - 60, text_width + 20, 25)
-    draw_scaled_text(WINDOW_WIDTH - text_width - 15, WINDOW_HEIGHT - 50, bullets_text, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-    
-    # Draw current speed with background
-    speed_text = f"SPEED: {player_move_speed:.0f}"
-    if player_speed_boost_active:
-        speed_text += " (BOOSTED!)"
-    
-    text_width = 0
-    for char in speed_text:
-        text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-    
-    draw_text_background(WINDOW_WIDTH - text_width - 25, WINDOW_HEIGHT - 90, text_width + 20, 25)
-    draw_scaled_text(WINDOW_WIDTH - text_width - 15, WINDOW_HEIGHT - 80, speed_text, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-    
-    # Draw notification if active
-    if notification_timer > 0:
-        text_width = 0
-        for char in notification_text:
-            text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-        x_pos = (WINDOW_WIDTH - text_width) // 2
+    # Helper: draw a rounded-look panel (dark bg with slight border)
+    def draw_panel(x, y, w, h, alpha=0.75, border_color=None):
+        sx = x * width_scale
+        sy = y * height_scale
+        sw = w * width_scale
+        sh = h * height_scale
         
-        draw_text_background(x_pos - 10, WINDOW_HEIGHT // 2 + 40, text_width + 20, 30, 0.8)
-        draw_scaled_centered_text(notification_text, WINDOW_HEIGHT // 2 + 50, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 0.2))
-    
-    # Draw progress bar with background
-    # Calculate progress for display
-    start_y = -PLAY_AREA_LENGTH / 2
-    end_y = PLAY_AREA_LENGTH / 2
-    total_distance = end_y - start_y
-    current_distance = player_position[1] - start_y
-    progress = current_distance / total_distance
-    
-    # Draw progress bar background with semi-transparent dark rectangle
-    bar_width = 350
-    bar_height = 30
-    bar_x = WINDOW_WIDTH - bar_width - 20
-    bar_y = WINDOW_HEIGHT - 50
-    
-    # Draw semi-transparent background
-    draw_text_background(bar_x - 10, bar_y - 5, bar_width + 20, bar_height + 10, 0.7)
-    
-    # Draw progress bar frame
-    glColor3f(0.5, 0.5, 0.5)
-    glLineWidth(2.0)
-    glBegin(GL_LINE_LOOP)
-    glVertex2f(bar_x * width_scale, bar_y * height_scale)
-    glVertex2f((bar_x + bar_width) * width_scale, bar_y * height_scale)
-    glVertex2f((bar_x + bar_width) * width_scale, (bar_y + bar_height) * height_scale)
-    glVertex2f(bar_x * width_scale, (bar_y + bar_height) * height_scale)
-    glEnd()
-    
-    # Draw progress
-    filled_width = bar_width * progress
-    
-    if progress < 0.5:
-        # Red to yellow gradient
-        r = 1.0
-        g = progress * 2.0
-        b = 0.0
-    else:
-        # Yellow to green gradient
-        r = 1.0 - (progress - 0.5) * 2.0
-        g = 1.0
-        b = 0.0
-    
-    glColor3f(r, g, b)
-    glBegin(GL_QUADS)
-    glVertex2f(bar_x * width_scale, bar_y * height_scale)
-    glVertex2f((bar_x + filled_width) * width_scale, bar_y * height_scale)
-    glVertex2f((bar_x + filled_width) * width_scale, (bar_y + bar_height) * height_scale)
-    glVertex2f(bar_x * width_scale, (bar_y + bar_height) * height_scale)
-    glEnd()
-    
-    # Draw percentage text
-    progress_text = f"Progress: {int(progress * 100)}%"
-    draw_scaled_text(bar_x + 10, bar_y + bar_height/2 - 5, progress_text, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-    
-    # Draw finish line label
-    finish_label = "FINISH"
-    draw_scaled_text(bar_x + bar_width - 60, bar_y + bar_height/2 - 5, finish_label, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-    
-    # Draw score with background
-    score_width = 220
-    score_height = 100
-    score_x = 20
-    score_y = WINDOW_HEIGHT - 70
-    
-    # Semi-transparent dark background
-    draw_text_background(score_x, score_y - score_height, score_width, score_height, 0.7)
-    
-    # Draw score text
-    title_text = "SCORE"
-    draw_scaled_text(score_x + 10, score_y - 20, title_text, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 0.0))
-    draw_scaled_text(score_x + 10, score_y - 45, f"Score: {player_score}", GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-    draw_scaled_text(score_x + 10, score_y - 70, f"Time: {time_survived:.1f}s", GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-    draw_scaled_text(score_x + 10, score_y - 95, f"Kills: {enemies_killed}", GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-    
-    # Draw game over or win message with background
-    if player_was_caught:
-        big_message = "ELIMINATED!"
-        if GAME_STATE == "red":
-            detail_message = "You moved during RED LIGHT!"
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
+        # Dark fill
+        glColor4f(0.05, 0.05, 0.1, alpha)
+        glBegin(GL_QUADS)
+        glVertex2f(sx, sy)
+        glVertex2f(sx + sw, sy)
+        glVertex2f(sx + sw, sy + sh)
+        glVertex2f(sx, sy + sh)
+        glEnd()
+        
+        # Border
+        if border_color:
+            glColor4f(border_color[0], border_color[1], border_color[2], 0.6)
         else:
-            detail_message = "You were caught by an enemy!"
+            glColor4f(0.3, 0.3, 0.4, 0.5)
+        glLineWidth(1.5)
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(sx, sy)
+        glVertex2f(sx + sw, sy)
+        glVertex2f(sx + sw, sy + sh)
+        glVertex2f(sx, sy + sh)
+        glEnd()
         
-        # Background for game over message
-        text_width = 0
-        for char in big_message:
-            text_width += glutBitmapWidth(GLUT_BITMAP_TIMES_ROMAN_24, ord(char))
-        x_pos = (WINDOW_WIDTH - text_width) // 2
+        glDisable(GL_BLEND)
+    
+    # Helper: draw a bar (progress/stamina/health style)
+    def draw_bar(x, y, w, h, fill_pct, fill_color, bg_color=(0.2, 0.2, 0.2), border=True):
+        sx = x * width_scale
+        sy = y * height_scale
+        sw = w * width_scale
+        sh = h * height_scale
+        fill_pct = max(0.0, min(1.0, fill_pct))
         
-        draw_text_background(x_pos - 15, WINDOW_HEIGHT // 2 + 20, text_width + 30, 30, 0.8)
-        draw_scaled_centered_text(big_message, WINDOW_HEIGHT // 2 + 30, GLUT_BITMAP_TIMES_ROMAN_24, (1.0, 0.2, 0.2))
+        # Background
+        glColor3f(*bg_color)
+        glBegin(GL_QUADS)
+        glVertex2f(sx, sy)
+        glVertex2f(sx + sw, sy)
+        glVertex2f(sx + sw, sy + sh)
+        glVertex2f(sx, sy + sh)
+        glEnd()
         
-        # Background for detail message
-        text_width = 0
-        for char in detail_message:
-            text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-        x_pos = (WINDOW_WIDTH - text_width) // 2
+        # Fill
+        fw = sw * fill_pct
+        glColor3f(*fill_color)
+        glBegin(GL_QUADS)
+        glVertex2f(sx, sy)
+        glVertex2f(sx + fw, sy)
+        glVertex2f(sx + fw, sy + sh)
+        glVertex2f(sx, sy + sh)
+        glEnd()
         
-        draw_text_background(x_pos - 10, WINDOW_HEIGHT // 2 - 10, text_width + 20, 25, 0.8)
-        draw_scaled_centered_text(detail_message, WINDOW_HEIGHT // 2, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
+        # Border
+        if border:
+            glColor3f(0.5, 0.5, 0.5)
+            glLineWidth(1.0)
+            glBegin(GL_LINE_LOOP)
+            glVertex2f(sx, sy)
+            glVertex2f(sx + sw, sy)
+            glVertex2f(sx + sw, sy + sh)
+            glVertex2f(sx, sy + sh)
+            glEnd()
+    
+    # Calculate common values
+    actual_speed = math.sqrt(player_velocity[0]**2 + player_velocity[1]**2)
+    is_sprint_active = player_is_sprinting and player_stamina > 0
+    stamina_pct = player_stamina / player_max_stamina
+    
+    start_y_pos = -PLAY_AREA_LENGTH / 2
+    end_y_pos = PLAY_AREA_LENGTH / 2
+    total_distance = end_y_pos - start_y_pos
+    current_distance = player_position[1] - start_y_pos
+    progress = max(0.0, min(1.0, current_distance / total_distance))
+    # Force 100% on win
+    if player_reached_finish:
+        progress = 1.0
+    
+    game_alive = not player_was_caught and not player_reached_finish
+    
+    # ===== 1. TOP LEFT: Score Panel =====
+    panel_x = 10
+    panel_y = WINDOW_HEIGHT - 110
+    panel_w = 200
+    panel_h = 100
+    
+    draw_panel(panel_x, panel_y, panel_w, panel_h, 0.8)
+    
+    # Score (gold, prominent)
+    draw_scaled_text(panel_x + 10, panel_y + panel_h - 22, f"SCORE  {player_score}", GLUT_BITMAP_HELVETICA_18, (1.0, 0.85, 0.1))
+    # Time
+    draw_scaled_text(panel_x + 10, panel_y + panel_h - 42, f"TIME   {time_survived:.1f}s", GLUT_BITMAP_HELVETICA_12, (0.8, 0.8, 0.8))
+    # Kills
+    draw_scaled_text(panel_x + 10, panel_y + panel_h - 58, f"KILLS  {enemies_killed}", GLUT_BITMAP_HELVETICA_12, (1.0, 0.45, 0.45))
+    # Phase & Level
+    draw_scaled_text(panel_x + 10, panel_y + panel_h - 74, f"PHASE  {GAME_PHASE}", GLUT_BITMAP_HELVETICA_12, (0.4, 0.9, 1.0))
+    draw_scaled_text(panel_x + 10, panel_y + panel_h - 90, f"LEVEL  {CURRENT_LEVEL}", GLUT_BITMAP_HELVETICA_12, (1.0, 0.6, 1.0))
+    
+    # ===== 2. TOP RIGHT: Quick Stats =====
+    stats_w = 160
+    stats_h = 80
+    stats_x = WINDOW_WIDTH - stats_w - 10
+    stats_y = WINDOW_HEIGHT - stats_h - 10
+    
+    draw_panel(stats_x, stats_y, stats_w, stats_h, 0.8)
+    
+    draw_scaled_text(stats_x + 8, stats_y + stats_h - 18, f"FPS {fps:.0f}", GLUT_BITMAP_HELVETICA_12, (0.5, 1.0, 0.5))
+    draw_scaled_text(stats_x + 80, stats_y + stats_h - 18, f"AMMO {len(bullets)}", GLUT_BITMAP_HELVETICA_12, (1.0, 0.8, 0.3))
+    
+    # Sprint / Exhaustion status
+    if sprint_exhausted:
+        cd_text = f"EXHAUSTED {sprint_cooldown_timer:.1f}s"
+        draw_scaled_text(stats_x + 8, stats_y + stats_h - 36, cd_text, GLUT_BITMAP_HELVETICA_12, (1.0, 0.2, 0.2))
+    elif is_sprint_active:
+        draw_scaled_text(stats_x + 8, stats_y + stats_h - 36, "SPRINTING", GLUT_BITMAP_HELVETICA_12, (1.0, 1.0, 0.0))
+    else:
+        draw_scaled_text(stats_x + 8, stats_y + stats_h - 36, f"SPEED {actual_speed:.0f}", GLUT_BITMAP_HELVETICA_12, (0.7, 0.7, 0.7))
+    
+    # Shield indicator
+    if player_shield_active:
+        draw_scaled_text(stats_x + 8, stats_y + stats_h - 52, f"SHIELD {player_shield_timer:.1f}s", GLUT_BITMAP_HELVETICA_12, (0.3, 0.7, 1.0))
+    
+    # Jump hint
+    if not player_on_ground:
+        draw_scaled_text(stats_x + 8, stats_y + stats_h - 68, "AIRBORNE", GLUT_BITMAP_HELVETICA_12, (0.5, 1.0, 0.8))
+    
+    # Mini stamina bar inside stats panel
+    mini_stam_x = stats_x + 8
+    mini_stam_y = stats_y + 6
+    mini_stam_w = stats_w - 16
+    mini_stam_h = 8
+    
+    if sprint_exhausted:
+        stam_color = (0.6, 0.1, 0.1)  # Dark red during cooldown
+    elif is_sprint_active:
+        stam_color = (1.0, 0.4, 0.1)
+    elif player_stamina < player_max_stamina:
+        stam_color = (0.6, 1.0, 0.2)
+    else:
+        stam_color = (0.2, 0.8, 1.0)
+    
+    draw_bar(mini_stam_x, mini_stam_y, mini_stam_w, mini_stam_h, stamina_pct, stam_color)
+    
+    # ===== 3. TOP CENTER: Light State + Timer =====
+    if game_alive:
+        if GAME_STATE == "red":
+            state_text = DIALOGUE_RED_LIGHT
+            state_color = (1.0, 0.15, 0.15)
+            border_c = (0.8, 0.1, 0.1)
+        elif GAME_STATE == "yellow":
+            state_text = DIALOGUE_YELLOW_WARNING
+            state_color = (1.0, 0.9, 0.1)
+            border_c = (0.8, 0.7, 0.0)
+        else:
+            state_text = DIALOGUE_GREEN_LIGHT
+            state_color = (0.15, 1.0, 0.15)
+            border_c = (0.1, 0.7, 0.1)
         
-        # Background for restart instruction
-        restart_text = "Press R to restart"
-        text_width = 0
-        for char in restart_text:
-            text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-        x_pos = (WINDOW_WIDTH - text_width) // 2
+        tw = text_w(state_text, GLUT_BITMAP_TIMES_ROMAN_24)
+        state_panel_w = tw + 60
+        state_panel_x = (WINDOW_WIDTH - state_panel_w) // 2
+        state_panel_y = WINDOW_HEIGHT - 55
+        state_panel_h = 45
         
-        draw_text_background(x_pos - 10, WINDOW_HEIGHT // 2 - 40, text_width + 20, 25, 0.8)
-        draw_scaled_centered_text(restart_text, WINDOW_HEIGHT // 2 - 30, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
+        draw_panel(state_panel_x, state_panel_y, state_panel_w, state_panel_h, 0.85, border_c)
+        draw_scaled_centered_text(state_text, WINDOW_HEIGHT - 40, GLUT_BITMAP_TIMES_ROMAN_24, state_color)
+        
+        # Timer below
+        time_left = max(0.0, NEXT_STATE_CHANGE - STATE_TIMER)
+        timer_text = f"Next in {time_left:.1f}s"
+        ttw = text_w(timer_text, GLUT_BITMAP_HELVETICA_12)
+        timer_panel_w = ttw + 30
+        timer_panel_x = (WINDOW_WIDTH - timer_panel_w) // 2
+        timer_panel_y = WINDOW_HEIGHT - 78
+        
+        draw_panel(timer_panel_x, timer_panel_y, timer_panel_w, 20, 0.6)
+        draw_scaled_centered_text(timer_text, WINDOW_HEIGHT - 74, GLUT_BITMAP_HELVETICA_12, (0.85, 0.85, 0.85))
+    
+    # ===== 4. NOTIFICATIONS (mid-center, below state) =====
+    if notification_timer > 0 and notification_text:
+        notif_alpha = min(1.0, notification_timer / 0.5)
+        nw = text_w(notification_text) + 40
+        nx = (WINDOW_WIDTH - nw) // 2
+        ny = WINDOW_HEIGHT - 115
+        
+        draw_panel(nx, ny, nw, 28, 0.7 * notif_alpha, (1.0, 0.9, 0.2))
+        draw_scaled_centered_text(notification_text, ny + 8, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 0.3))
+    
+    # ===== 5. BOTTOM: Progress Bar =====
+    prog_bar_w = 500
+    prog_bar_h = 16
+    prog_bar_x = (WINDOW_WIDTH - prog_bar_w) // 2
+    prog_bar_y = 35
+    
+    # Progress fill color: red -> yellow -> green
+    if progress < 0.5:
+        pr, pg, pb = 1.0, progress * 2.0, 0.0
+    else:
+        pr, pg, pb = 1.0 - (progress - 0.5) * 2.0, 1.0, 0.0
+    
+    # Panel behind progress
+    draw_panel(prog_bar_x - 8, prog_bar_y - 8, prog_bar_w + 16, prog_bar_h + 34, 0.7)
+    draw_bar(prog_bar_x, prog_bar_y, prog_bar_w, prog_bar_h, progress, (pr, pg, pb))
+    
+    # Progress label
+    progress_text = f"PROGRESS: {int(progress * 100)}%"
+    draw_scaled_centered_text(progress_text, prog_bar_y + prog_bar_h + 5, GLUT_BITMAP_HELVETICA_12, (1.0, 1.0, 1.0))
+    
+    # ===== 6. GAME OVER / WIN OVERLAY =====
+    if player_was_caught:
+        # Dark overlay
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glColor4f(0.0, 0.0, 0.0, 0.5)
+        glBegin(GL_QUADS)
+        glVertex2f(0, 0)
+        glVertex2f(window_width, 0)
+        glVertex2f(window_width, window_height)
+        glVertex2f(0, window_height)
+        glEnd()
+        glDisable(GL_BLEND)
+        
+        # Big centered panel
+        ov_w = 420
+        ov_h = 200
+        ov_x = (WINDOW_WIDTH - ov_w) // 2
+        ov_y = (WINDOW_HEIGHT - ov_h) // 2
+        
+        draw_panel(ov_x, ov_y, ov_w, ov_h, 0.9, (0.8, 0.1, 0.1))
+        
+        # "ELIMINATED" title
+        draw_scaled_centered_text("ELIMINATED", ov_y + ov_h - 40, GLUT_BITMAP_TIMES_ROMAN_24, (1.0, 0.15, 0.15))
+        
+        # Cause
+        if GAME_STATE == "red":
+            cause = "You moved during RED LIGHT!"
+        else:
+            cause = "Caught by an enemy!"
+        draw_scaled_centered_text(cause, ov_y + ov_h - 75, GLUT_BITMAP_HELVETICA_18, (1.0, 0.7, 0.7))
+        
+        # Stats
+        draw_scaled_centered_text(f"Score: {player_score}    Kills: {enemies_killed}    Time: {time_survived:.1f}s", ov_y + ov_h - 110, GLUT_BITMAP_HELVETICA_12, (0.8, 0.8, 0.8))
+        draw_scaled_centered_text(f"Phase Reached: {GAME_PHASE}    Progress: {int(progress * 100)}%", ov_y + ov_h - 135, GLUT_BITMAP_HELVETICA_12, (0.8, 0.8, 0.8))
+        
+        # Pulsing restart prompt
+        pulse = 0.6 + 0.4 * math.sin(time.time() * 3.0)
+        draw_scaled_centered_text("Press R to Restart", ov_y + 20, GLUT_BITMAP_HELVETICA_18, (pulse, pulse, pulse))
         
     elif player_reached_finish:
-        # Win message
-        big_message = "YOU WIN!"
-        text_width = 0
-        for char in big_message:
-            text_width += glutBitmapWidth(GLUT_BITMAP_TIMES_ROMAN_24, ord(char))
-        x_pos = (WINDOW_WIDTH - text_width) // 2
+        # Gold overlay
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glColor4f(0.1, 0.08, 0.0, 0.4)
+        glBegin(GL_QUADS)
+        glVertex2f(0, 0)
+        glVertex2f(window_width, 0)
+        glVertex2f(window_width, window_height)
+        glVertex2f(0, window_height)
+        glEnd()
+        glDisable(GL_BLEND)
         
-        draw_text_background(x_pos - 15, WINDOW_HEIGHT // 2 + 20, text_width + 30, 30, 0.8)
-        draw_scaled_centered_text(big_message, WINDOW_HEIGHT // 2 + 30, GLUT_BITMAP_TIMES_ROMAN_24, (0.2, 1.0, 0.2))
+        # Big centered panel
+        ov_w = 450
+        ov_h = 320
+        ov_x = (WINDOW_WIDTH - ov_w) // 2
+        ov_y = (WINDOW_HEIGHT - ov_h) // 2
         
-        # Score message
-        score_text = f"Final Score: {player_score}"
-        text_width = 0
-        for char in score_text:
-            text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-        x_pos = (WINDOW_WIDTH - text_width) // 2
+        draw_panel(ov_x, ov_y, ov_w, ov_h, 0.92, (0.2, 0.8, 0.2))
         
-        draw_text_background(x_pos - 10, WINDOW_HEIGHT // 2 - 10, text_width + 20, 25, 0.8)
-        draw_scaled_centered_text(score_text, WINDOW_HEIGHT // 2, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
+        # "YOU WIN" title with pulsing gold
+        pulse = 0.7 + 0.3 * math.sin(time.time() * 2.5)
+        draw_scaled_centered_text("YOU WIN!", ov_y + ov_h - 35, GLUT_BITMAP_TIMES_ROMAN_24, (pulse, 0.9 * pulse, 0.1))
         
-        # Restart instruction
-        restart_text = "Press R to restart"
-        text_width = 0
-        for char in restart_text:
-            text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-        x_pos = (WINDOW_WIDTH - text_width) // 2
+        # Subtitle
+        draw_scaled_centered_text("You reached the finish line!", ov_y + ov_h - 60, GLUT_BITMAP_HELVETICA_18, (0.8, 1.0, 0.8))
         
-        draw_text_background(x_pos - 10, WINDOW_HEIGHT // 2 - 40, text_width + 20, 25, 0.8)
-        draw_scaled_centered_text(restart_text, WINDOW_HEIGHT // 2 - 30, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
+        # Stats
+        draw_scaled_centered_text(f"Final Score: {player_score}", ov_y + ov_h - 90, GLUT_BITMAP_HELVETICA_18, (1.0, 0.85, 0.1))
+        draw_scaled_centered_text(f"Kills: {enemies_killed}    Time: {time_survived:.1f}s    Phase: {GAME_PHASE}    Level: {CURRENT_LEVEL}", ov_y + ov_h - 115, GLUT_BITMAP_HELVETICA_12, (0.8, 0.8, 0.8))
+        
+        # Name entry
+        if name_entry_active:
+            draw_scaled_centered_text("Enter your name for the leaderboard:", ov_y + ov_h - 145, GLUT_BITMAP_HELVETICA_12, (0.9, 0.9, 0.5))
+            # Name input box
+            input_w = 200
+            input_h = 24
+            input_x = (WINDOW_WIDTH - input_w) // 2
+            input_y = ov_y + ov_h - 175
+            draw_panel(input_x, input_y, input_w, input_h, 0.6, (0.8, 0.8, 0.2))
+            cursor = "_" if int(time.time() * 2) % 2 == 0 else " "  # Blinking cursor
+            draw_scaled_centered_text(player_name_input + cursor, input_y + 6, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
+            draw_scaled_centered_text("Press ENTER to submit", ov_y + ov_h - 195, GLUT_BITMAP_HELVETICA_12, (0.7, 0.7, 0.7))
+        else:
+            # Show high scores
+            if high_scores:
+                draw_scaled_centered_text("--- HIGH SCORES ---", ov_y + ov_h - 145, GLUT_BITMAP_HELVETICA_12, (1.0, 0.85, 0.1))
+                for i, (name, score) in enumerate(high_scores[:5]):
+                    rank_color = (1.0, 0.85, 0.1) if i == 0 else (0.8, 0.8, 0.8)
+                    hs_text = f"{i+1}. {name} - {score}"
+                    draw_scaled_centered_text(hs_text, ov_y + ov_h - 162 - i * 16, GLUT_BITMAP_HELVETICA_12, rank_color)
+            
+            # Next level / Restart
+            pulse2 = 0.6 + 0.4 * math.sin(time.time() * 3.0)
+            draw_scaled_centered_text("Press N for Next Level", ov_y + 38, GLUT_BITMAP_HELVETICA_18, (0.2, 1.0, 0.4))
+            draw_scaled_centered_text("Press R to Restart (Lv.1)", ov_y + 16, GLUT_BITMAP_HELVETICA_12, (pulse2, pulse2, pulse2))
     
-    # Draw speed boost indicator if active
+    # Speed boost indicator (top-right, below stats panel)  
     if player_speed_boost_active:
-        boost_text = f"SPEED BOOST: {player_speed_boost_timer:.1f}s"
-        text_width = 0
-        for char in boost_text:
-            text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-        
-        draw_text_background(WINDOW_WIDTH - text_width - 25, 30, text_width + 20, 25, 0.8)
-        draw_scaled_text(WINDOW_WIDTH - text_width - 15, 40, boost_text, GLUT_BITMAP_HELVETICA_18, (0.0, 0.8, 1.0))
+        boost_text = f"SPEED BOOST {player_speed_boost_timer:.1f}s"
+        bw = text_w(boost_text, GLUT_BITMAP_HELVETICA_12)
+        bx = WINDOW_WIDTH - bw - 30
+        by = stats_y - 30
+        draw_panel(bx, by, bw + 20, 22, 0.8, (0.0, 0.6, 1.0))
+        draw_scaled_text(bx + 10, by + 5, boost_text, GLUT_BITMAP_HELVETICA_12, (0.0, 0.9, 1.0))
     
-    # Draw debug info if enabled
+    # Debug info (only when P pressed)
     if print_debug:
-        draw_text_background(10, WINDOW_HEIGHT - 120, 400, 80, 0.6)
-        
+        draw_panel(10, WINDOW_HEIGHT - 200, 380, 90, 0.7)
         px, py = int(player_position[0]), int(player_position[1])
-        draw_scaled_text(15, WINDOW_HEIGHT - 50, f"PPos:({px},{py}) Dir:{player_direction:.0f}", GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-        draw_scaled_text(15, WINDOW_HEIGHT - 70, f"Cam Y:{camera_yaw:.0f} P:{camera_pitch:.0f} D:{camera_distance:.0f}", GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-        draw_scaled_text(15, WINDOW_HEIGHT - 90, f"Game: {GAME_STATE} Timer: {STATE_TIMER:.1f}/{NEXT_STATE_CHANGE:.1f}", GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
-        draw_scaled_text(15, WINDOW_HEIGHT - 110, f"Phase: {GAME_PHASE} Velocity: {player_velocity[0]:.1f}, {player_velocity[1]:.1f}", GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
+        draw_scaled_text(18, WINDOW_HEIGHT - 120, f"Pos:({px},{py}) Dir:{player_direction:.0f}", GLUT_BITMAP_HELVETICA_12, (0.7, 1.0, 0.7))
+        draw_scaled_text(18, WINDOW_HEIGHT - 138, f"Cam Y:{camera_yaw:.0f} P:{camera_pitch:.0f} D:{camera_distance:.0f}", GLUT_BITMAP_HELVETICA_12, (0.7, 1.0, 0.7))
+        draw_scaled_text(18, WINDOW_HEIGHT - 156, f"State:{GAME_STATE} Timer:{STATE_TIMER:.1f}/{NEXT_STATE_CHANGE:.1f}", GLUT_BITMAP_HELVETICA_12, (0.7, 1.0, 0.7))
+        draw_scaled_text(18, WINDOW_HEIGHT - 174, f"Phase:{GAME_PHASE} Vel:{player_velocity[0]:.0f},{player_velocity[1]:.0f}", GLUT_BITMAP_HELVETICA_12, (0.7, 1.0, 0.7))
     
-    # Draw controls help with background
-    controls_text = "Move: WASD | Camera: Arrows | Zoom: Z/X | Shoot: Space | Restart: R | Exit: ESC"
-    text_width = 0
-    for char in controls_text:
-        text_width += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, ord(char))
-    
-    draw_text_background(10, 5, text_width + 10, 25, 0.7)
-    draw_scaled_text(15, 10, controls_text, GLUT_BITMAP_HELVETICA_18, (1.0, 1.0, 1.0))
+    # Minimal controls hint (very bottom-left, small)
+    ctrl_text = "WASD:Move  Arrows:Cam  Space:Shoot  Shift:Sprint  J:Jump  R:Restart"
+    draw_scaled_text(12, 8, ctrl_text, GLUT_BITMAP_HELVETICA_12, (0.5, 0.5, 0.5))
     
     # Restore rendering state
     glEnable(GL_LIGHTING)
@@ -2951,6 +3697,8 @@ def print_controls():
     print(" Camera Tilt: Arrow Keys")
     print(" Camera Zoom: Z/X")
     print(" Shoot: Spacebar (Works during any light state)")
+    print(" Sprint: Hold Shift")
+    print(" Jump: J")
     print(" Restart Game: R")
     print(" Debug Info: P")
     print(" Exit: ESC")
@@ -2963,8 +3711,11 @@ def print_controls():
     print("   - RED: Fast, 1 hit to kill")
     print("   - BLUE: Medium speed, 2 hits to kill") 
     print("   - BLACK: Slow but big, 5 hits to kill")
-    print(" - Collect speed boost power-ups for temporary faster movement")
+    print(" - Collect power-ups: Speed Boost (yellow) and Shield (blue)")
+    print(" - Shield absorbs one enemy hit or bullet")
+    print(" - Enemies shoot slow bullets - dodge them!")
     print(" - The game gets harder as time passes")
+    print(" - After winning, press N for next level (harder!)")
     print(" - Reach the white finish line to win!")
     print("---------------------------------------")
 
@@ -3033,6 +3784,7 @@ def main():
     
     # Generate environment and enemies
     setup_fixed_environment()
+    create_environment_display_list()
     setup_enemies()
     setup_powerups()
     
@@ -3046,9 +3798,48 @@ def main():
     glutReshapeFunc(reshape)
     
     # Start the game loop
-    print("Starting game... Press Space to start, ESC to exit")
+    print("Starting game... Press Enter to start, ESC to exit")
     glutMainLoop()
 
 # --- Entry Point ---
 if __name__ == "__main__":
     main()
+
+# Particle System Functions
+def spawn_particles(position, color, count):
+    """Spawn particles at the given position."""
+    global particles
+    for _ in range(count):
+        vel_x = random.uniform(-200, 200)
+        vel_y = random.uniform(-200, 200)
+        vel_z = random.uniform(50, 300)
+        particle = {
+            'pos': list(position),
+            'vel': [vel_x, vel_y, vel_z],
+            'color': color,
+            'size': random.uniform(5, 15),
+            'life': random.uniform(0.5, 1.0)
+        }
+        particles.append(particle)
+
+def update_particles(delta_time):
+    """Update particle physics and remove dead particles."""
+    global particles
+    to_remove = []
+    for i, p in enumerate(particles):
+        # Update position
+        p['pos'][0] += p['vel'][0] * delta_time
+        p['pos'][1] += p['vel'][1] * delta_time
+        p['pos'][2] += p['vel'][2] * delta_time
+        
+        # Apply gravity
+        p['vel'][2] -= 500 * delta_time
+        
+        # Reduce life
+        p['life'] -= delta_time
+        if p['life'] <= 0:
+            to_remove.append(i)
+    
+    # Remove dead particles
+    for i in reversed(to_remove):
+        particles.pop(i)
