@@ -1,6 +1,6 @@
 # Squid Game: Red Light, Green Light
 
-A 3D game built from scratch in **Python** using **PyOpenGL** and **GLUT**, inspired by the iconic "Red Light, Green Light" challenge from *Squid Game* — with added combat, power-ups, enemy AI, level progression, and more.
+A 3D game built from scratch in **Python** using **PyOpenGL** and **GLUT**, inspired by the iconic "Red Light, Green Light" challenge from _Squid Game_ — with added combat, power-ups, enemy AI, level progression, and more.
 
 > **Version 4.0** — Solo project by **Ziad**
 
@@ -10,11 +10,11 @@ A 3D game built from scratch in **Python** using **PyOpenGL** and **GLUT**, insp
 
 Race across a dangerous arena to reach the finish line while obeying the doll's commands:
 
-| Light State | What Happens |
-|-------------|-------------|
-| **Green** | Move freely — the doll faces away |
-| **Yellow** | Warning — red light is imminent, the doll starts turning |
-| **Red** | **FREEZE!** Any movement = instant elimination |
+| Light State | What Happens                                             |
+| ----------- | -------------------------------------------------------- |
+| **Green**   | Move freely — the doll faces away                        |
+| **Yellow**  | Warning — red light is imminent, the doll starts turning |
+| **Red**     | **FREEZE!** Any movement = instant elimination           |
 
 ### Core Mechanics
 
@@ -28,11 +28,11 @@ Race across a dangerous arena to reach the finish line while obeying the doll's 
 
 ### Enemies
 
-| Type | Speed | Health | Behavior |
-|------|-------|--------|----------|
-| **Red** | Fast | 1 HP | Aggressive, shoots from Level 2+ |
-| **Blue** | Medium | 2 HP | Balanced, shoots bullets |
-| **Black** | Slow | 5+ HP | Tanky, large hitbox, always shoots |
+| Type      | Speed  | Health | Behavior                           |
+| --------- | ------ | ------ | ---------------------------------- |
+| **Red**   | Fast   | 1 HP   | Aggressive, shoots from Level 2+   |
+| **Blue**  | Medium | 2 HP   | Balanced, shoots bullets           |
+| **Black** | Slow   | 5+ HP  | Tanky, large hitbox, always shoots |
 
 ### Win / Lose Conditions
 
@@ -43,18 +43,18 @@ Race across a dangerous arena to reach the finish line while obeying the doll's 
 
 ## Controls
 
-| Key | Action |
-|-----|--------|
-| `W` `A` `S` `D` | Move (relative to camera) |
-| `Arrow Keys` | Rotate / tilt camera |
-| `Z` / `X` | Zoom in / out |
-| `Space` | Shoot |
-| `Shift` (hold) | Sprint |
-| `J` | Jump |
-| `R` | Restart game (Level 1) |
-| `N` | Next level (after winning) |
-| `P` | Toggle debug info |
-| `ESC` | Exit |
+| Key             | Action                     |
+| --------------- | -------------------------- |
+| `W` `A` `S` `D` | Move (relative to camera)  |
+| `Arrow Keys`    | Rotate / tilt camera       |
+| `Z` / `X`       | Zoom in / out              |
+| `Space`         | Shoot                      |
+| `Shift` (hold)  | Sprint                     |
+| `J`             | Jump                       |
+| `R`             | Restart game (Level 1)     |
+| `N`             | Next level (after winning) |
+| `P`             | Toggle debug info          |
+| `ESC`           | Exit                       |
 
 ---
 
@@ -103,7 +103,7 @@ sudo apt-get install freeglut3-dev
 ```bash
 git clone https://github.com/fnziad/Red-Light-Green-Light.git
 cd Red-Light-Green-Light
-python3 project_group.py
+python3 main.py
 ```
 
 Press **Enter** on the start screen to begin.
@@ -114,31 +114,29 @@ Press **Enter** on the start screen to begin.
 
 ```
 Red-Light-Green-Light/
-├── project_group.py      # Main game — all logic, rendering, and UI
-├── LICENSE               # MIT License
-├── README.md             # This file
-└── STABLE_NOTES.md       # Development / stability notes
+├── main.py       # Main game — all logic, rendering, and UI
+├── LICENSE       # MIT License
+└── README.md     # This file
 ```
 
-> The `OpenGL/` directory is the bundled PyOpenGL library for portability.
-> `project_group_backup.py` and `pygame_version/` are legacy files not required to run the game.
+> The `OpenGL/` directory is the bundled PyOpenGL library included for portability (can also install via `pip install PyOpenGL`).
 
 ---
 
 ## Code Architecture
 
-The entire game is contained in a single file (`project_group.py`) organized into these sections:
+The entire game is contained in a single file (`main.py`) organized into these sections:
 
-| Section | Description |
-|---------|-------------|
-| **Global Constants** | Window config, arena dimensions, physics, timing, entity settings |
-| **Setup Functions** | `setup_enemies()`, `setup_powerups()`, `setup_fixed_environment()` |
+| Section               | Description                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Global Constants**  | Window config, arena dimensions, physics, timing, entity settings                                                        |
+| **Setup Functions**   | `setup_enemies()`, `setup_powerups()`, `setup_fixed_environment()`                                                       |
 | **Drawing Functions** | `draw_player()`, `draw_enemy()`, `draw_doll()`, `draw_bullet()`, `draw_powerup()`, `draw_shield_effect()`, HUD rendering |
-| **Game Logic** | `update_state()` (main loop), `update_enemies()`, `update_bullets()`, `update_enemy_bullets()`, `check_collisions()` |
-| **Camera** | `setup_camera()` with third-person orbit, zoom, and screen shake |
-| **Input Handlers** | `key_pressed()`, `key_released()`, `special_key_*()` — WASD, sprint, jump, shoot, name entry |
-| **Game Flow** | `start_game()`, `restart_game()`, `next_level()` |
-| **Main** | GLUT initialization, callback registration, `glutMainLoop()` |
+| **Game Logic**        | `update_state()` (main loop), `update_enemies()`, `update_bullets()`, `update_enemy_bullets()`, `check_collisions()`     |
+| **Camera**            | `setup_camera()` with third-person orbit, zoom, and screen shake                                                         |
+| **Input Handlers**    | `key_pressed()`, `key_released()`, `special_key_*()` — WASD, sprint, jump, shoot, name entry                             |
+| **Game Flow**         | `start_game()`, `restart_game()`, `next_level()`                                                                         |
+| **Main**              | GLUT initialization, callback registration, `glutMainLoop()`                                                             |
 
 ---
 
