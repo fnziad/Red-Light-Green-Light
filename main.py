@@ -2972,16 +2972,10 @@ def key_pressed(key, x, y):
     
     # ESC to exit game
     if key == b'\x1b':
-        # ESC key - Try to exit gracefully
-        try:
-            glutLeaveMainLoop()
-        except:
-            # If glutLeaveMainLoop doesn't exist, destroy window
-            try:
-                glutDestroyWindow(glutGetWindow())
-            except:
-                import sys
-                sys.exit(0)
+        # Use os._exit to avoid macOS GLUT segfault on shutdown
+        import os
+        print("\nGame exited. Thanks for playing!")
+        os._exit(0)
         
     # P to toggle debug info
     if key == b'p':
@@ -3253,13 +3247,14 @@ def display():
     glDisable(GL_DEPTH_TEST)
     glDisable(GL_LIGHTING)
     
-    # Red Light Tint/Vignette Effect
+    # Red Light Tint/Vignette Effect - strong blinking red tint
     if GAME_STATE == "red" and DOLL_CURRENT_ROTATION < 45:
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         
-        # Pulsing red overlay
-        pulse = 0.15 + 0.10 * math.sin(time.time() * 3.0)
+        # Intense blinking red overlay
+        blink = 0.5 + 0.5 * math.sin(time.time() * 6.0)  # Fast blink
+        pulse = 0.12 + 0.18 * blink
         glColor4f(1.0, 0.0, 0.0, pulse)
         
         glBegin(GL_QUADS)
@@ -3267,6 +3262,89 @@ def display():
         glVertex2f(window_width, 0)
         glVertex2f(window_width, window_height)
         glVertex2f(0, window_height)
+        glEnd()
+        
+        # Red border frame for extra emphasis
+        border = 12
+        glColor4f(1.0, 0.05, 0.05, 0.25 + 0.2 * blink)
+        # Top
+        glBegin(GL_QUADS)
+        glVertex2f(0, window_height - border)
+        glVertex2f(window_width, window_height - border)
+        glVertex2f(window_width, window_height)
+        glVertex2f(0, window_height)
+        glEnd()
+        # Bottom
+        glBegin(GL_QUADS)
+        glVertex2f(0, 0)
+        glVertex2f(window_width, 0)
+        glVertex2f(window_width, border)
+        glVertex2f(0, border)
+        glEnd()
+        # Left
+        glBegin(GL_QUADS)
+        glVertex2f(0, 0)
+        glVertex2f(border, 0)
+        glVertex2f(border, window_height)
+        glVertex2f(0, window_height)
+        glEnd()
+        # Right
+        glBegin(GL_QUADS)
+        glVertex2f(window_width - border, 0)
+        glVertex2f(window_width, 0)
+        glVertex2f(window_width, window_height)
+        glVertex2f(window_width - border, window_height)
+        glEnd()
+        
+        glDisable(GL_BLEND)
+    
+    # Yellow Light Tint - warning blink
+    elif GAME_STATE == "yellow":
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
+        # Blinking yellow/amber overlay
+        blink = 0.5 + 0.5 * math.sin(time.time() * 4.0)  # Medium blink
+        pulse = 0.06 + 0.10 * blink
+        glColor4f(1.0, 0.85, 0.0, pulse)
+        
+        glBegin(GL_QUADS)
+        glVertex2f(0, 0)
+        glVertex2f(window_width, 0)
+        glVertex2f(window_width, window_height)
+        glVertex2f(0, window_height)
+        glEnd()
+        
+        # Yellow border frame
+        border = 8
+        glColor4f(1.0, 0.8, 0.0, 0.15 + 0.15 * blink)
+        # Top
+        glBegin(GL_QUADS)
+        glVertex2f(0, window_height - border)
+        glVertex2f(window_width, window_height - border)
+        glVertex2f(window_width, window_height)
+        glVertex2f(0, window_height)
+        glEnd()
+        # Bottom
+        glBegin(GL_QUADS)
+        glVertex2f(0, 0)
+        glVertex2f(window_width, 0)
+        glVertex2f(window_width, border)
+        glVertex2f(0, border)
+        glEnd()
+        # Left
+        glBegin(GL_QUADS)
+        glVertex2f(0, 0)
+        glVertex2f(border, 0)
+        glVertex2f(border, window_height)
+        glVertex2f(0, window_height)
+        glEnd()
+        # Right
+        glBegin(GL_QUADS)
+        glVertex2f(window_width - border, 0)
+        glVertex2f(window_width, 0)
+        glVertex2f(window_width, window_height)
+        glVertex2f(window_width - border, window_height)
         glEnd()
         
         glDisable(GL_BLEND)
@@ -3442,7 +3520,7 @@ def display():
     
     # ===== 2. TOP RIGHT: Quick Stats =====
     stats_w = 160
-    stats_h = 80
+    stats_h = 100
     stats_x = WINDOW_WIDTH - stats_w - 10
     stats_y = WINDOW_HEIGHT - stats_h - 10
     
@@ -3457,8 +3535,6 @@ def display():
         draw_scaled_text(stats_x + 8, stats_y + stats_h - 36, cd_text, GLUT_BITMAP_HELVETICA_12, (1.0, 0.2, 0.2))
     elif is_sprint_active:
         draw_scaled_text(stats_x + 8, stats_y + stats_h - 36, "SPRINTING", GLUT_BITMAP_HELVETICA_12, (1.0, 1.0, 0.0))
-    else:
-        draw_scaled_text(stats_x + 8, stats_y + stats_h - 36, f"SPEED {actual_speed:.0f}", GLUT_BITMAP_HELVETICA_12, (0.7, 0.7, 0.7))
     
     # Shield indicator
     if player_shield_active:
@@ -3468,7 +3544,29 @@ def display():
     if not player_on_ground:
         draw_scaled_text(stats_x + 8, stats_y + stats_h - 68, "AIRBORNE", GLUT_BITMAP_HELVETICA_12, (0.5, 1.0, 0.8))
     
-    # Mini stamina bar inside stats panel
+    # --- Speed Meter ---
+    max_display_speed = player_base_speed * 2.5  # Scale bar relative to max possible speed
+    speed_pct = min(1.0, actual_speed / max_display_speed)
+    speed_bar_x = stats_x + 8
+    speed_bar_y = stats_y + 22
+    speed_bar_w = stats_w - 16
+    speed_bar_h = 8
+    
+    # Color shifts: white → green → yellow → red as speed increases
+    if speed_pct < 0.4:
+        spd_color = (0.6, 0.8, 1.0)   # Light blue (walking)
+    elif speed_pct < 0.7:
+        spd_color = (0.2, 1.0, 0.3)   # Green (jogging)
+    elif speed_pct < 0.9:
+        spd_color = (1.0, 0.9, 0.1)   # Yellow (sprinting)
+    else:
+        spd_color = (1.0, 0.3, 0.1)   # Red (boosted)
+    
+    draw_bar(speed_bar_x, speed_bar_y, speed_bar_w, speed_bar_h, speed_pct, spd_color)
+    speed_label = f"SPD {actual_speed:.0f}"
+    draw_scaled_text(speed_bar_x, speed_bar_y + speed_bar_h + 2, speed_label, GLUT_BITMAP_HELVETICA_12, spd_color)
+    
+    # --- Stamina Bar ---
     mini_stam_x = stats_x + 8
     mini_stam_y = stats_y + 6
     mini_stam_w = stats_w - 16
