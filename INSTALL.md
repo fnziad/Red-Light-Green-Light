@@ -6,12 +6,12 @@ This guide walks you through installing and running the game on macOS, Windows, 
 
 ## Requirements
 
-| Requirement     | Version | Notes                           |
-| --------------- | ------- | ------------------------------- |
-| Python          | 3.8+    | 3.10+ recommended               |
-| pip             | Any     | Comes with Python                |
-| PyOpenGL        | 3.x     | Only external dependency         |
-| OpenGL / GLUT   | System  | Pre-installed on macOS; see below |
+| Requirement   | Version | Notes                             |
+| ------------- | ------- | --------------------------------- |
+| Python        | 3.8+    | 3.10+ recommended                 |
+| pip           | Any     | Comes with Python                 |
+| PyOpenGL      | 3.x     | Only external dependency          |
+| OpenGL / GLUT | System  | Pre-installed on macOS; see below |
 
 ---
 
@@ -106,13 +106,13 @@ python run_game.py
 
 ## Troubleshooting
 
-| Problem | Solution |
-| ------- | -------- |
-| `No module named 'OpenGL'` | Run `pip install PyOpenGL PyOpenGL_accelerate` |
-| `glutInit() error` on Linux | Run `sudo apt install freeglut3-dev` |
-| Black screen / no window | Update GPU drivers and ensure OpenGL 2.0+ is supported |
-| `Unable to import numpymodule` warning | Harmless — install `numpy` optionally to suppress it |
-| Game exits immediately | Check terminal output for Python errors |
+| Problem                                | Solution                                               |
+| -------------------------------------- | ------------------------------------------------------ |
+| `No module named 'OpenGL'`             | Run `pip install PyOpenGL PyOpenGL_accelerate`         |
+| `glutInit() error` on Linux            | Run `sudo apt install freeglut3-dev`                   |
+| Black screen / no window               | Update GPU drivers and ensure OpenGL 2.0+ is supported |
+| `Unable to import numpymodule` warning | Harmless — install `numpy` optionally to suppress it   |
+| Game exits immediately                 | Check terminal output for Python errors                |
 
 ---
 

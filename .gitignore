@@ -73,3 +73,8 @@ pygame_version/
 STABLE_NOTES.md
 OpenGL/
 scrap/
+
+# Large media files (keep locally, too large for GitHub without LFS)
+*.mov
+*.mp4
+*.mkv

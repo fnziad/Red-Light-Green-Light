@@ -37,11 +37,11 @@ Race across a dangerous arena to reach the finish line while obeying the doll's 
 
 ### 🚦 Red Light / Green Light Mechanic
 
-| State | What Happens |
-| ----- | ------------ |
-| **Green** | Move freely — the doll faces away |
-| **Yellow** | Warning — red light is imminent, amber screen tint |
-| **Red** | **FREEZE!** Any movement = instant elimination, red screen blink |
+| State      | What Happens                                                     |
+| ---------- | ---------------------------------------------------------------- |
+| **Green**  | Move freely — the doll faces away                                |
+| **Yellow** | Warning — red light is imminent, amber screen tint               |
+| **Red**    | **FREEZE!** Any movement = instant elimination, red screen blink |
 
 - Randomised state durations that shorten with each difficulty phase
 - Blinking full-screen colour tint overlay for immediate visual feedback
@@ -67,21 +67,21 @@ Race across a dangerous arena to reach the finish line while obeying the doll's 
 
 ### 🛡️ Power-Ups
 
-| Type | Shape | Effect |
-| ---- | ----- | ------ |
-| **Speed Boost** | Yellow lightning bolt | +70% speed for 10 s |
-| **Shield** | Blue diamond | Absorbs next enemy hit or bullet — destroys enemy on contact |
+| Type            | Shape                 | Effect                                                       |
+| --------------- | --------------------- | ------------------------------------------------------------ |
+| **Speed Boost** | Yellow lightning bolt | +70% speed for 10 s                                          |
+| **Shield**      | Blue diamond          | Absorbs next enemy hit or bullet — destroys enemy on contact |
 
 - Power-ups bob and glow in the arena; new ones spawn every 15 seconds
 - Shield timer shown in HUD while active
 
 ### 👾 Three Enemy Types
 
-| Type | Speed | Health | Behaviour |
-| ---- | ----- | ------ | --------- |
-| **Red** | Fast | 1 HP | Aggressive, shoots from Level 2+ |
-| **Blue** | Medium | 2 HP | Balanced, always shoots |
-| **Black** | Slow | 5+ HP | Tanky, large hitbox, always shoots |
+| Type      | Speed  | Health | Behaviour                          |
+| --------- | ------ | ------ | ---------------------------------- |
+| **Red**   | Fast   | 1 HP   | Aggressive, shoots from Level 2+   |
+| **Blue**  | Medium | 2 HP   | Balanced, always shoots            |
+| **Black** | Slow   | 5+ HP  | Tanky, large hitbox, always shoots |
 
 - All enemies shoot **slow dodgeable bullets** toward the player with aim jitter
 - Enemy count, speed, health, and bullet frequency all scale with level
@@ -94,30 +94,30 @@ Race across a dangerous arena to reach the finish line while obeying the doll's 
 
 ### 📊 HUD
 
-| Panel | Content |
-| ----- | ------- |
-| Top-left | Score, Time, Kills, Phase, Level |
-| Top-right | FPS, Ammo, Sprint/Exhaustion status, Shield timer, Speed meter bar, Stamina bar |
-| Top-centre | Light state label + countdown timer |
-| Bottom | Progress bar to finish line |
-| Win overlay | Final stats, name entry, top-5 leaderboard |
+| Panel       | Content                                                                         |
+| ----------- | ------------------------------------------------------------------------------- |
+| Top-left    | Score, Time, Kills, Phase, Level                                                |
+| Top-right   | FPS, Ammo, Sprint/Exhaustion status, Shield timer, Speed meter bar, Stamina bar |
+| Top-centre  | Light state label + countdown timer                                             |
+| Bottom      | Progress bar to finish line                                                     |
+| Win overlay | Final stats, name entry, top-5 leaderboard                                      |
 
 ---
 
 ## Controls
 
-| Key | Action |
-| --- | ------ |
-| `W` `A` `S` `D` | Move (relative to camera) |
-| `Arrow Keys` | Rotate / tilt camera |
-| `Z` / `X` | Zoom in / out |
-| `Space` | Shoot |
-| `Shift` (hold) | Sprint |
-| `J` | Jump |
-| `R` | Restart (Level 1, score reset) |
-| `N` | Next level (after winning) |
-| `P` | Toggle debug info |
-| `ESC` | Quit |
+| Key             | Action                         |
+| --------------- | ------------------------------ |
+| `W` `A` `S` `D` | Move (relative to camera)      |
+| `Arrow Keys`    | Rotate / tilt camera           |
+| `Z` / `X`       | Zoom in / out                  |
+| `Space`         | Shoot                          |
+| `Shift` (hold)  | Sprint                         |
+| `J`             | Jump                           |
+| `R`             | Restart (Level 1, score reset) |
+| `N`             | Next level (after winning)     |
+| `P`             | Toggle debug info              |
+| `ESC`           | Quit                           |
 
 ---
 
@@ -162,15 +162,15 @@ Red-Light-Green-Light/
 
 ## Technical Overview
 
-| Area | Implementation |
-| ---- | -------------- |
-| Language | Python 3 |
-| Graphics API | OpenGL 2.x fixed-function via PyOpenGL + GLUT |
-| 3D Models | Primitives: cubes, spheres, cylinders (no external assets) |
-| Physics | Velocity + friction, delta-time scaled, gravity for jumps |
-| Enemy AI | State machine: patrol / freeze / shoot per light state |
-| Input | GLUT keyboard callbacks, Shift via glutGetModifiers() |
-| Exit | `os._exit(0)` — avoids macOS GLUT segfault on shutdown |
+| Area         | Implementation                                             |
+| ------------ | ---------------------------------------------------------- |
+| Language     | Python 3                                                   |
+| Graphics API | OpenGL 2.x fixed-function via PyOpenGL + GLUT              |
+| 3D Models    | Primitives: cubes, spheres, cylinders (no external assets) |
+| Physics      | Velocity + friction, delta-time scaled, gravity for jumps  |
+| Enemy AI     | State machine: patrol / freeze / shoot per light state     |
+| Input        | GLUT keyboard callbacks, Shift via glutGetModifiers()      |
+| Exit         | `os._exit(0)` — avoids macOS GLUT segfault on shutdown     |
 
 ---
 
