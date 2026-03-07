@@ -1,0 +1,190 @@
+================================================================================
+  SQUID GAME: RED LIGHT, GREEN LIGHT — PROJECT INFORMATION
+  A 3D Survival Game in Python / OpenGL
+================================================================================
+
+Author      : Fahad Nadim Ziad
+Email       : f.n.ziad@gmail.com
+Year        : 2026
+Version     : 4.0
+License     : MIT
+Repository  : https://github.com/fnziad/Red-Light-Green-Light
+
+--------------------------------------------------------------------------------
+  OVERVIEW
+--------------------------------------------------------------------------------
+
+A fully playable 3D survival game built entirely from scratch in Python using
+the raw OpenGL fixed-function pipeline and GLUT. Inspired by the iconic
+"Red Light, Green Light" challenge from Squid Game, the game adds a full
+shooting system, sprint mechanics, jump physics, enemy bullet dodging, a shield
+power-up, multi-level progression, and a high score leaderboard.
+
+No game engine. No physics library. No assets. Every triangle, every lighting
+calculation, and every collision is hand-written in ~3,950 lines of Python.
+
+Started as a university group assignment for a Computer Graphics course, then
+expanded solo into a complete game with multiple systems and polished UI.
+
+--------------------------------------------------------------------------------
+  TECHNICAL SKILLS DEMONSTRATED
+--------------------------------------------------------------------------------
+
+Graphics & Rendering
+  - OpenGL fixed-function pipeline (glBegin/glEnd, display lists, fog, blending)
+  - 3D scene: procedural arena, forest environment, finish zone, doll model
+  - Segmented 3D character models for player, enemies, and the doll (no assets)
+  - Muzzle flash, bullet trails, shield bubble, pulsing power-up orbs
+  - 2D HUD overlay via orthographic projection (gluOrtho2D)
+  - Animated screen tints for Red Light (fast blink) and Yellow Light (medium blink)
+  - Progress bar, stamina bar, speed meter with dynamic colour coding
+
+Camera System
+  - Third-person orbital camera with smooth lerp interpolation
+  - Player-relative WASD movement aligned to camera yaw
+  - Arrow-key rotation and zoom (Z/X)
+  - Screen shake on hit with intensity decay
+
+Physics
+  - Velocity + friction player movement model with delta-time scaling
+  - Jump mechanic with full gravity simulation (JUMP_FORCE=450, GRAVITY=900)
+  - Ground collision detection and airborne state tracking
+  - Sprint stamina with exhaustion state, cooldown timer, and speed penalty
+
+Game Architecture
+  - Single-file Python game engine (~3,950 lines)
+  - Entity-component style dictionaries for enemies, bullets, power-ups
+  - Red / Yellow / Green light state machine with randomised interval timing
+  - Phase-based difficulty escalation (shorter intervals over time)
+  - Level progression system (N to advance) with scaling difficulty
+
+Enemy System
+  - Three enemy types: Red (fast, 1 HP), Blue (medium, 2 HP), Black (tanky, 5+ HP)
+  - Level-scaled enemy count, speed, health, and shoot intervals
+  - Enemy bullet system: slow projectiles with aim jitter fired toward the player
+  - State: patrol / freeze / shoot based on GAME_STATE
+  - Enemies freeze on RED LIGHT (with chance of risking it per type)
+
+Weapons & Combat
+  - Spacebar shooting with bullet physics and collision detection
+  - Ammo management (display list size shown in HUD)
+  - Sprint exhaustion: over-sprinting triggers 4-second cooldown + 55% speed penalty
+
+Power-Up System
+  - Two types: Speed Boost (+70% speed, yellow bolt) and Shield (blue diamond)
+  - Shield absorbs one enemy melee collision or bullet hit — destroys enemy on contact
+  - Bobbing animation, glow rings, randomised arena spawning (every 15 seconds)
+
+UI / HUD
+  - Top-left panel: SCORE, TIME, KILLS, PHASE, LEVEL
+  - Top-right panel: FPS, AMMO, sprint/exhaustion status, SHIELD timer, speed meter bar
+  - Centre top: Light state label with countdown timer
+  - Bottom: Progress bar to finish line
+  - Win overlay: final stats, name entry, top-5 leaderboard
+  - Game over overlay with score breakdown
+  - Start screen with animated press-to-start button and controls reference
+  - Blinking red/yellow border frame during RED / YELLOW light
+
+Input Handling
+  - GLUT keyboard callbacks (normal + special keys + modifiers)
+  - Shift sprint via glutGetModifiers() in key-down only (macOS segfault workaround)
+  - Name entry mode on win: typed characters, backspace, Enter to save, ESC to cancel
+  - Clean exit with os._exit(0) to avoid macOS GLUT segfault on shutdown
+
+--------------------------------------------------------------------------------
+  PROJECT STRUCTURE
+--------------------------------------------------------------------------------
+
+Red-Light-Green-Light/
+├── previews/                        — Screenshots and gameplay captures
+├── src/
+│   └── red_light_green_light.py    — Complete game engine (~3,950 lines)
+├── run_game.py                      — Launcher with controls reference banner
+├── requirements.txt                 — PyOpenGL dependency
+├── README.md                        — Full project documentation
+├── INSTALL.md                       — Platform installation guide
+├── LICENSE                          — MIT License
+└── PROJECT_INFO.txt                 — This file (portfolio overview)
+
+--------------------------------------------------------------------------------
+  DEPENDENCIES
+--------------------------------------------------------------------------------
+
+  Python       3.8+           (tested on 3.10, 3.14)
+  PyOpenGL     3.1.7          pip install PyOpenGL
+  GLUT         System-level   macOS built-in; freeglut on Linux/Windows
+
+  No game engine. No physics library. No GUI framework. No external assets.
+
+--------------------------------------------------------------------------------
+  DESIGN DECISIONS
+--------------------------------------------------------------------------------
+
+1. Single-file architecture
+   Keeps the project portable and easy to share. All rendering, logic, input,
+   and AI in one file. Allows anyone to run it with a single Python file.
+
+2. Fixed-function OpenGL (not shaders)
+   Deliberately avoids GLSL to demonstrate understanding of the underlying
+   transformation pipeline — modelview stack, normal vectors, material
+   properties, lighting equations — without shader abstraction.
+
+3. Python + GLUT over Pygame / Panda3D
+   Maximises control over the render loop and demonstrates low-level API
+   usage, directly relevant to Computer Graphics coursework.
+
+4. glutGetModifiers() only in key-down callbacks
+   On macOS, calling glutGetModifiers() in a key-UP callback causes a
+   segmentation fault. Sprint state is only updated on key-down events,
+   with a keys_pressed set managing held key tracking.
+
+5. os._exit(0) for clean shutdown
+   glutLeaveMainLoop() and sys.exit() both cause macOS GLUT to segfault on
+   teardown. os._exit(0) bypasses Python's cleanup and exits without crashing.
+
+6. Sprint exhaustion system
+   Unlimited sprint would trivialise the game. The stamina bar depletes on
+   sprint; hitting zero triggers a 4-second exhaustion cooldown with the
+   player locked to 55% base speed — encouraging strategic use of sprint.
+
+7. Enemy bullets with aim jitter
+   Enemies shoot slow projectiles with random aim offset scaled to difficulty.
+   Players can dodge by jumping or strafing. Bullet speed deliberately kept
+   low to make dodging feel fair and rewarding.
+
+8. Level progression preserves score
+   Pressing N after winning advances to the next level without resetting score
+   — enemies scale up but the player keeps their momentum. Pressing R resets
+   everything (score included) for a clean run.
+
+--------------------------------------------------------------------------------
+  GAMEPLAY SUMMARY
+--------------------------------------------------------------------------------
+
+  Gamemode       : Race to the finish line — Squid Game survival
+  Perspective    : Third-person with orbital camera
+  Objective      : Reach the far end of the arena (progress >= 95%)
+  Lose Condition : Move during RED LIGHT, touched by enemy, or hit by bullet
+  Power-Ups      : Speed Boost (+70% speed), Shield (absorbs one hit)
+  Enemies        : Red / Blue / Black — all shoot bullets at higher levels
+  Progression    : Level-ups via N key; each level scales enemies up
+  High Scores    : Name entry on win; top-5 displayed on win screen
+
+--------------------------------------------------------------------------------
+  CONTROLS
+--------------------------------------------------------------------------------
+
+  W / A / S / D     Move (relative to camera direction)
+  Arrow Keys        Rotate / tilt camera
+  Z / X             Zoom in / out
+  Space             Shoot
+  Shift (hold)      Sprint (uses stamina bar)
+  J                 Jump
+  R                 Restart game (Level 1, score reset)
+  N                 Next level (after winning — score preserved)
+  P                 Toggle debug overlay
+  ESC               Quit
+
+================================================================================
+  END OF PROJECT INFO
+================================================================================
